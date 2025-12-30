@@ -15,6 +15,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyDietitianMobileApp.Infras
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyDietitianMobileApp.Shared", "src\MyDietitianMobileApp.Shared\MyDietitianMobileApp.Shared.csproj", "{B3737E03-3524-4EB8-8F9D-3D4F28CE75AC}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docker", "Docker", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -95,5 +100,8 @@ Global
 		{6E255434-722A-4D6F-B5C1-28481C24B666} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{3EC936EF-5F46-4AA7-B526-137F3DA224D2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{B3737E03-3524-4EB8-8F9D-3D4F28CE75AC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5F2653F7-5A6F-4898-8229-959B5B63FFE1}
 	EndGlobalSection
 EndGlobal

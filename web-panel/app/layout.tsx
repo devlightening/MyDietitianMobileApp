@@ -1,22 +1,24 @@
-import './globals.css'
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import { ReactNode } from 'react'
-import { ThemeProvider } from '@/components/theme/ThemeProvider'
-
-const inter = Inter({ subsets: ['latin'] })
+import type { Metadata } from "next";
+import Providers from "./providers";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'MyDietitian Panel',
-  description: 'Clinic-oriented SaaS panel for dietitians',
-}
+  title: "MyDietitian Panel",
+  description: "Clinic-oriented SaaS panel for dietitians",
+};
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
-      <body className={`bg-clinic text-gray-900 ${inter.className}`}>
-        <ThemeProvider>{children}</ThemeProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-background text-foreground">
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
-  )
+  );
 }

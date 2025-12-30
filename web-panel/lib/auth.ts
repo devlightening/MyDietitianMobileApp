@@ -1,50 +1,17 @@
-import { cookies } from 'next/headers'
-import jwt_decode from 'jwt-decode'
-
-export function getJwt(): string | null {
-  if (typeof window !== 'undefined') {
-    return window.localStorage.getItem('jwt');
-  }
-  return null;
+// Server-only: check if an access_token cookie exists
+export function isAuthenticatedServer(): boolean {
+  const { cookies } = require('next/headers');
+  const token = cookies().get('access_token');
+  return !!token;
 }
 
-export function setJwt(token: string) {
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem('jwt', token);
-  }
-}
-
-export function clearJwt() {
-  if (typeof window !== 'undefined') {
-    window.localStorage.removeItem('jwt');
-  }
-}
-
-export function parseJwt(token: string): any {
+// Client: perform logout by calling backend to clear HttpOnly cookie
+export async function logout(): Promise<void> {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const url = base ? `${base}/api/auth/logout` : '/api/auth/logout';
   try {
-    return jwt_decode(token);
+    await fetch(url, { method: 'POST', credentials: 'include' });
   } catch {
-    return null;
+    // swallow
   }
 }
-
-export function isDietitian(token: string | null): boolean {
-  if (!token) return false;
-  const payload = parseJwt(token);
-  return payload?.role === 'Dietitian';
-}
-
-export function isClient(token: string | null): boolean {
-  if (!token) return false;
-  const payload = parseJwt(token);
-  return payload?.role === 'Client';
-}
-
-export function isAuthenticated(): boolean {
-  if (typeof window === 'undefined') return false;
-  const token = window.localStorage.getItem('jwt');
-  return !!token && (isDietitian(token) || isClient(token));
-}
-
-
-

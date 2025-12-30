@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Handlers;
@@ -8,7 +11,9 @@ using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Api.Utils;
+using Npgsql;
 using System.Text;
+using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,11 +59,46 @@ builder.Services.AddSwaggerGen(c =>
 // --------------------
 // DbContexts (PostgreSQL)
 // --------------------
+var appDbConnection = builder.Configuration.GetConnectionString("AppDb");
+var authDbConnection = builder.Configuration.GetConnectionString("AuthDb");
+
+if (string.IsNullOrWhiteSpace(appDbConnection))
+{
+    throw new InvalidOperationException(
+        "Connection string 'AppDb' is missing. Check appsettings.Development.json");
+}
+
+if (string.IsNullOrWhiteSpace(authDbConnection))
+{
+    throw new InvalidOperationException(
+        "Connection string 'AuthDb' is missing. Check appsettings.Development.json");
+}
+
+// Log connection strings (without password) in Development
+// Note: Actual logging will happen after builder.Build() when logger is available
+
+// Configure Npgsql with connection timeout and retry strategy
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    options.UseNpgsql(appDbConnection, npgsqlOptions =>
+    {
+        // Connection timeout: 30 seconds
+        npgsqlOptions.CommandTimeout(30);
+    });
+    // Enable retry on failure (for transient errors)
+    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
+});
 
 builder.Services.AddDbContext<AuthDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    options.UseNpgsql(authDbConnection, npgsqlOptions =>
+    {
+        // Connection timeout: 30 seconds
+        npgsqlOptions.CommandTimeout(30);
+    });
+    // Enable retry on failure (for transient errors)
+    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
+});
 
 builder.Services.AddScoped<PasswordHasherService>();
 
@@ -77,6 +117,23 @@ builder.Services.AddScoped<ICreateAccessKeyHandler, CreateAccessKeyCommandHandle
 builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKeyForClientCommandHandler>();
 builder.Services.AddScoped<ICreateRecipeHandler, CreateRecipeCommandHandler>();
 builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
+
+// --------------------
+// CORS (for local Next.js dev)
+// --------------------
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy.WithOrigins(
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
+    });
+});
 
 // --------------------
 // JWT CONFIG (🔥 KRİTİK DÜZELTME)
@@ -113,6 +170,18 @@ builder.Services.AddAuthentication(options =>
             Encoding.UTF8.GetBytes(jwtSecret)
         )
     };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            if (context.Request.Cookies.TryGetValue("access_token", out var token))
+            {
+                context.Token = token;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 // --------------------
@@ -127,6 +196,69 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 // --------------------
+// Database Connectivity Check (Startup)
+// --------------------
+if (app.Environment.IsDevelopment())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        // Log connection strings (without password) for debugging
+        var safeAppDbConnection = appDbConnection.Contains("Password=", StringComparison.Ordinal)
+            ? appDbConnection[..appDbConnection.IndexOf("Password=", StringComparison.Ordinal)] + "Password=***"
+            : appDbConnection;
+        var safeAuthDbConnection = authDbConnection.Contains("Password=", StringComparison.Ordinal)
+            ? authDbConnection[..authDbConnection.IndexOf("Password=", StringComparison.Ordinal)] + "Password=***"
+            : authDbConnection;
+        logger.LogInformation("🔌 PostgreSQL AppDb Connection: {ConnectionString}", safeAppDbConnection);
+        logger.LogInformation("🔌 PostgreSQL AuthDb Connection: {ConnectionString}", safeAuthDbConnection);
+        
+        try
+        {
+            // Test AppDbContext connection
+            var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var canConnect = await appDb.Database.CanConnectAsync();
+            if (!canConnect)
+            {
+                logger.LogError("❌ Failed to connect to PostgreSQL database (AppDbContext). " +
+                    "Check connection string and ensure PostgreSQL is running on port 5432.");
+                throw new InvalidOperationException(
+                    "Database connection failed. Ensure PostgreSQL is running and connection string is correct.");
+            }
+            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AppDbContext)");
+
+            // Test AuthDbContext connection
+            var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            canConnect = await authDb.Database.CanConnectAsync();
+            if (!canConnect)
+            {
+                logger.LogError("❌ Failed to connect to PostgreSQL database (AuthDbContext). " +
+                    "Check connection string and ensure PostgreSQL is running on port 5432.");
+                throw new InvalidOperationException(
+                    "Database connection failed. Ensure PostgreSQL is running and connection string is correct.");
+            }
+            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AuthDbContext)");
+        }
+        catch (NpgsqlException ex)
+        {
+            logger.LogError(ex, "❌ PostgreSQL connection error: {Message}", ex.Message);
+            logger.LogError("💡 Troubleshooting:");
+            logger.LogError("   1. Ensure PostgreSQL is running on localhost:5432");
+            logger.LogError("   2. Check connection string in appsettings.Development.json");
+            logger.LogError("   3. Verify database 'mydietitian_dev' exists");
+            logger.LogError("   4. If using Docker, change port to 5433 in connection string");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Unexpected error during database connectivity check");
+            throw;
+        }
+    }
+}
+
+// --------------------
 // Middleware
 // --------------------
 if (app.Environment.IsDevelopment())
@@ -135,7 +267,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Only redirect to HTTPS in non-development
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -218,7 +356,8 @@ app.MapPost("/api/auth/dietitian/register", async (
 app.MapPost("/api/auth/dietitian/login", async (
     MyDietitianMobileApp.Api.Models.LoginDietitianRequest request,
     AuthDbContext authDb,
-    PasswordHasherService hasher) =>
+    PasswordHasherService hasher,
+    HttpResponse response) =>
 {
     var user = await authDb.UserAccounts
         .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Dietitian");
@@ -235,7 +374,17 @@ app.MapPost("/api/auth/dietitian/login", async (
         expiresMinutes
     );
 
-    return Results.Ok(new { token });
+    var cookieOptions = new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = !app.Environment.IsDevelopment(),
+        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
+        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
+        Path = "/"
+    };
+
+    response.Cookies.Append("access_token", token, cookieOptions);
+    return Results.Ok(new { ok = true });
 });
 
 // --------------------
@@ -244,7 +393,8 @@ app.MapPost("/api/auth/dietitian/login", async (
 app.MapPost("/api/auth/client/access-key", async (
     MyDietitianMobileApp.Api.Models.LoginClientWithAccessKeyRequest request,
     AppDbContext appDb,
-    AuthDbContext authDb) =>
+    AuthDbContext authDb,
+    HttpResponse response) =>
 {
     var accessKey = await appDb.AccessKeys
         .FirstOrDefaultAsync(a => a.Key == request.AccessKey && a.IsActive);
@@ -301,7 +451,34 @@ app.MapPost("/api/auth/client/access-key", async (
         }
     );
 
-    return Results.Ok(new { token });
+    var cookieOptions = new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = !app.Environment.IsDevelopment(),
+        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
+        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
+        Path = "/"
+    };
+
+    response.Cookies.Append("access_token", token, cookieOptions);
+    return Results.Ok(new { ok = true });
+});
+
+// --------------------
+// AUTH — LOGOUT
+// --------------------
+app.MapPost("/api/auth/logout", (HttpResponse response) =>
+{
+    var cookieOptions = new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = !app.Environment.IsDevelopment(),
+        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
+        Expires = DateTime.UtcNow.AddDays(-1),
+        Path = "/"
+    };
+    response.Cookies.Delete("access_token", cookieOptions);
+    return Results.Ok(new { ok = true });
 });
 
 app.Run();
