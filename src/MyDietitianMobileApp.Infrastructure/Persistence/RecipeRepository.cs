@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
-using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Repositories;
 using System;
 using System.Collections.Generic;
 using System.Linq;

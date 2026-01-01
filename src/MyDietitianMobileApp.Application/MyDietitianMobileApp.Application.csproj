@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MyDietitianMobileApp.Domain\MyDietitianMobileApp.Domain.csproj" />
+    <ProjectReference Include="..\MyDietitianMobileApp.Infrastructure\MyDietitianMobileApp.Infrastructure.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

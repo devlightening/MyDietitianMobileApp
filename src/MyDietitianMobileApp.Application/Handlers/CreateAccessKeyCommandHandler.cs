@@ -1,5 +1,6 @@
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Repositories;
 using System;
 
 namespace MyDietitianMobileApp.Application.Handlers
@@ -28,14 +29,5 @@ namespace MyDietitianMobileApp.Application.Handlers
             dietitian.AddClient(client); // optional: ensure association
             return new CreateAccessKeyResult(accessKey.Id);
         }
-    }
-
-    public interface IDietitianRepository
-    {
-        Dietitian GetById(Guid id);
-    }
-    public interface IClientRepository
-    {
-        Client GetById(Guid id);
     }
 }

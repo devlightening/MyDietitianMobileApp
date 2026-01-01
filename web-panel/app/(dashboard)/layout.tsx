@@ -1,5 +1,6 @@
 // app/(dashboard)/layout.tsx
 import ServerGuard from "@/components/ServerGuard"
+import { AppLayout } from "@/components/layout/AppLayout"
 
 export default function DashboardLayout({
   children,
@@ -8,9 +9,7 @@ export default function DashboardLayout({
 }) {
   return (
     <ServerGuard>
-      <div className="min-h-screen bg-background text-foreground">
-        {children}
-      </div>
+      <AppLayout>{children}</AppLayout>
     </ServerGuard>
   )
 }

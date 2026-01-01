@@ -1,4 +1,5 @@
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Repositories;
 using System;
 using System.Collections.Generic;
 
@@ -26,9 +27,5 @@ namespace MyDietitianMobileApp.Application.Queries
             }
             return new ListRecipesByActiveDietitianResult(result);
         }
-    }
-    public interface IRecipeRepository
-    {
-        IEnumerable<Recipe> ListByDietitianId(Guid dietitianId);
     }
 }

@@ -10,11 +10,21 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<Recipe> Recipes { get; set; }
         public DbSet<Ingredient> Ingredients { get; set; }
         public DbSet<AccessKey> AccessKeys { get; set; }
+        
+        // Compliance tracking entities
+        public DbSet<DietPlan> DietPlans { get; set; }
+        public DbSet<DietDay> DietDays { get; set; }
+        public DbSet<Meal> Meals { get; set; }
+        public DbSet<MealItem> MealItems { get; set; }
+        public DbSet<MealItemCompliance> MealItemCompliance { get; set; }
+        public DbSet<ComplianceScoreConfig> ComplianceScoreConfigs { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
             // Multi-tenant filtering: DietitianId on relevant entities
             modelBuilder.Entity<Client>()
                 .HasIndex(c => c.ActiveDietitianId);
@@ -22,7 +32,165 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 .HasIndex(r => r.DietitianId);
             modelBuilder.Entity<AccessKey>()
                 .HasIndex(a => new { a.DietitianId, a.ClientId });
-            // Add further configuration as needed
+
+            // ============================================
+            // Compliance Tracking Configuration
+            // ============================================
+
+            // DietPlan
+            modelBuilder.Entity<DietPlan>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DietitianId);
+                entity.HasIndex(e => e.ClientId);
+                entity.HasIndex(e => new { e.ClientId, e.IsActive });
+                
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.StartDate).IsRequired();
+                entity.Property(e => e.EndDate).IsRequired();
+                entity.Property(e => e.IsActive).IsRequired();
+
+                // Navigation property mapping (backing field)
+                entity.HasMany<DietDay>()
+                    .WithOne()
+                    .HasForeignKey(d => d.DietPlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.Metadata.FindNavigation(nameof(DietPlan.Days))!
+                    .SetPropertyAccessMode(PropertyAccessMode.Field);
+            });
+
+            // DietDay
+            modelBuilder.Entity<DietDay>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DietPlanId);
+                
+                // Unique constraint: One day per plan per date
+                entity.HasIndex(e => new { e.DietPlanId, e.Date })
+                    .IsUnique();
+
+                // DateOnly mapping for PostgreSQL
+                entity.Property(e => e.Date)
+                    .IsRequired()
+                    .HasConversion(
+                        d => d.ToDateTime(TimeOnly.MinValue),
+                        d => DateOnly.FromDateTime(d));
+
+                // Navigation property mapping
+                entity.HasMany<Meal>()
+                    .WithOne()
+                    .HasForeignKey(m => m.DietDayId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.Metadata.FindNavigation(nameof(DietDay.Meals))!
+                    .SetPropertyAccessMode(PropertyAccessMode.Field);
+            });
+
+            // Meal
+            modelBuilder.Entity<Meal>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DietDayId);
+                entity.HasIndex(e => new { e.DietDayId, e.Type });
+
+                entity.Property(e => e.Type).IsRequired();
+                entity.Property(e => e.CustomName).HasMaxLength(200);
+
+                // Navigation property mapping
+                entity.HasMany<MealItem>()
+                    .WithOne()
+                    .HasForeignKey(mi => mi.MealId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.Metadata.FindNavigation(nameof(Meal.Items))!
+                    .SetPropertyAccessMode(PropertyAccessMode.Field);
+            });
+
+            // MealItem
+            modelBuilder.Entity<MealItem>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.MealId);
+                entity.HasIndex(e => e.IngredientId);
+
+                entity.Property(e => e.IsMandatory).IsRequired();
+                entity.Property(e => e.Amount).HasPrecision(10, 2);
+                entity.Property(e => e.Unit).HasMaxLength(50);
+            });
+
+            // MealItemCompliance ⭐ CORE TABLE
+            modelBuilder.Entity<MealItemCompliance>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                
+                // Critical indexes for performance
+                entity.HasIndex(e => new { e.ClientId, e.MarkedAt });
+                entity.HasIndex(e => new { e.ClientId, e.DietPlanId });
+                entity.HasIndex(e => e.MarkedAt);
+                entity.HasIndex(e => e.DietDayId);
+                entity.HasIndex(e => e.MealId);
+
+                entity.Property(e => e.Status).IsRequired();
+                entity.Property(e => e.MarkedAt).IsRequired();
+
+                // 🔴 IDEMPOTENT CONSTRAINT: Same client, same meal item, same day = UPDATE, not INSERT
+                entity.HasIndex(e => new { e.ClientId, e.MealItemId, e.DietDayId })
+                    .IsUnique();
+
+                // Relationships
+                entity.HasOne<Client>()
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne<DietPlan>()
+                    .WithMany()
+                    .HasForeignKey(e => e.DietPlanId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne<DietDay>()
+                    .WithMany()
+                    .HasForeignKey(e => e.DietDayId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne<Meal>()
+                    .WithMany()
+                    .HasForeignKey(e => e.MealId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne<MealItem>()
+                    .WithMany()
+                    .HasForeignKey(e => e.MealItemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne<Ingredient>()
+                    .WithMany()
+                    .HasForeignKey(e => e.IngredientId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ComplianceScoreConfig
+            modelBuilder.Entity<ComplianceScoreConfig>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                
+                entity.HasIndex(e => e.DietitianId);
+                entity.HasIndex(e => e.DietPlanId);
+                
+                // Unique constraint: One config per dietitian (default) or per plan
+                entity.HasIndex(e => new { e.DietitianId, e.DietPlanId })
+                    .IsUnique();
+
+                entity.Property(e => e.MandatoryDone).IsRequired().HasDefaultValue(10);
+                entity.Property(e => e.MandatoryAlternative).IsRequired().HasDefaultValue(7);
+                entity.Property(e => e.MandatorySkipped).IsRequired().HasDefaultValue(0);
+                entity.Property(e => e.OptionalDone).IsRequired().HasDefaultValue(3);
+                entity.Property(e => e.OptionalSkipped).IsRequired().HasDefaultValue(0);
+            });
+
+            // Note: Navigation properties (Days, Meals, Items) are configured
+            // via HasMany/WithOne above. EF Core will handle the relationships automatically.
         }
     }
 }

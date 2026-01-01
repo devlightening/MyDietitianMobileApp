@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
-using MyDietitianMobileApp.Application.Handlers;
+using MyDietitianMobileApp.Domain.Repositories;
 
 namespace MyDietitianMobileApp.Infrastructure.Persistence
 {

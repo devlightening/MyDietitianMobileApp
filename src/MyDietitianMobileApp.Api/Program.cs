@@ -8,12 +8,17 @@ using Microsoft.IdentityModel.Tokens;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Handlers;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Services;
+using MyDietitianMobileApp.Infrastructure.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Api.Utils;
+using MyDietitianMobileApp.Api.Models;
 using Npgsql;
 using System.Text;
 using System.Threading.Tasks;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -117,6 +122,14 @@ builder.Services.AddScoped<ICreateAccessKeyHandler, CreateAccessKeyCommandHandle
 builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKeyForClientCommandHandler>();
 builder.Services.AddScoped<ICreateRecipeHandler, CreateRecipeCommandHandler>();
 builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
+
+// Compliance handlers
+builder.Services.AddScoped<IMarkComplianceHandler, MarkComplianceCommandHandler>();
+builder.Services.AddScoped<IGetDailyComplianceHandler, GetDailyComplianceQueryHandler>();
+builder.Services.AddScoped<IGetLiveClientsHandler, GetLiveClientsQueryHandler>();
+
+// Compliance services
+builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
 
 // --------------------
 // CORS (for local Next.js dev)
@@ -223,7 +236,7 @@ if (app.Environment.IsDevelopment())
             {
                 logger.LogError("❌ Failed to connect to PostgreSQL database (AppDbContext). " +
                     "Check connection string and ensure PostgreSQL is running on port 5432.");
-                throw new InvalidOperationException(
+                throw new InvalidOperationException( 
                     "Database connection failed. Ensure PostgreSQL is running and connection string is correct.");
             }
             logger.LogInformation("✅ Successfully connected to PostgreSQL database (AppDbContext)");
@@ -317,6 +330,137 @@ app.MapGet("/api/recipes", (
     var result = handler.Handle(query);
     return Results.Ok(result);
 }).RequireAuthorization();
+
+// --------------------
+// COMPLIANCE ENDPOINTS
+// --------------------
+
+// POST /api/compliance/mark - Client marks a meal item
+app.MapPost("/api/compliance/mark", async (
+    MarkComplianceRequest request,
+    HttpContext httpContext,
+    AppDbContext appDb,
+    AuthDbContext authDb,
+    IMarkComplianceHandler handler) =>
+{
+    // Get client ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Client");
+    if (user == null || !user.LinkedClientId.HasValue)
+        return Results.Unauthorized();
+
+    var clientId = user.LinkedClientId.Value;
+
+    // Parse status
+    if (!Enum.TryParse<ComplianceStatus>(request.Status, ignoreCase: true, out var status))
+        return Results.BadRequest("Invalid status. Must be: Done, Skipped, or Alternative");
+
+    // Validate Alternative status
+    if (status == ComplianceStatus.Alternative && !request.AlternativeIngredientId.HasValue)
+        return Results.BadRequest("AlternativeIngredientId is required when status is Alternative");
+
+    try
+    {
+        var command = new MarkComplianceCommand(
+            clientId,
+            request.MealItemId,
+            status,
+            request.AlternativeIngredientId,
+            request.ClientTimezoneOffsetMinutes
+        );
+
+        var result = await handler.HandleAsync(command);
+        return Results.Ok(new MarkComplianceResponse
+        {
+            Success = result.Success,
+            DailyCompliancePercentage = result.DailyCompliancePercentage,
+            ComplianceId = result.ComplianceId
+        });
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Unauthorized();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Client");
+
+// GET /api/compliance/daily - Dietitian views client's daily compliance
+app.MapGet("/api/compliance/daily", async (
+    Guid clientId,
+    DateOnly? date,
+    HttpContext httpContext,
+    AppDbContext appDb,
+    AuthDbContext authDb,
+    IGetDailyComplianceHandler handler) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    // Use today if date not provided
+    var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+    try
+    {
+        var query = new GetDailyComplianceQuery(dietitianId, clientId, targetDate);
+        var result = await handler.HandleAsync(query);
+        return Results.Ok(result);
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return Results.Unauthorized();
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Dietitian");
+
+// GET /api/dietitian/live-clients - Dashboard live view
+app.MapGet("/api/dietitian/live-clients", async (
+    HttpContext httpContext,
+    AuthDbContext authDb,
+    IGetLiveClientsHandler handler) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    try
+    {
+        var query = new GetLiveClientsQuery(dietitianId);
+        var result = await handler.HandleAsync(query);
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Dietitian");
 
 // --------------------
 // AUTH — DIETITIAN REGISTER

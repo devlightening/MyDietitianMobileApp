@@ -1,5 +1,6 @@
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Repositories;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -45,9 +46,5 @@ namespace MyDietitianMobileApp.Application.Handlers
             dietitian.AddRecipe(recipe);
             return new CreateRecipeResult(recipe.Id);
         }
-    }
-    public interface IIngredientRepository
-    {
-        Ingredient GetById(Guid id);
     }
 }

@@ -1,9 +1,13 @@
 "use client"
-import DietitianGuard from '@/components/DietitianGuard'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useState } from 'react'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Plus, ChefHat, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
 
 function IngredientsInput({ onChange }: { onChange?: (ingredients: { name: string; amount: string }[]) => void }) {
   const [ingredients, setIngredients] = useState([{ name: '', amount: '' }]);
@@ -28,29 +32,46 @@ function IngredientsInput({ onChange }: { onChange?: (ingredients: { name: strin
 
   return (
     <div className="space-y-3">
-      <div className="font-medium text-card-foreground">Ingredients</div>
-      {ingredients.map((ing, idx) => (
-        <div key={idx} className="flex gap-2">
-          <input
-            className="border border-input px-3 py-2 rounded-md flex-1 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-            placeholder="Name"
-            value={ing.name}
-            onChange={e => handleIngredientChange(idx, 'name', e.target.value)}
-            required
-          />
-          <input
-            className="border border-input px-3 py-2 rounded-md w-32 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-            placeholder="Amount"
-            value={ing.amount}
-            onChange={e => handleIngredientChange(idx, 'amount', e.target.value)}
-            required
-          />
-          {ingredients.length > 1 && (
-            <button type="button" onClick={() => removeIngredient(idx)} className="text-danger hover:underline px-3 font-medium">Remove</button>
-          )}
-        </div>
-      ))}
-      <button type="button" onClick={addIngredient} className="text-primary hover:underline text-sm mt-1 font-medium">+ Add Ingredient</button>
+      <label className="text-sm font-medium text-foreground">Ingredients</label>
+      <div className="space-y-2">
+        {ingredients.map((ing, idx) => (
+          <div key={idx} className="flex gap-2">
+            <Input
+              className="flex-1"
+              placeholder="Ingredient name"
+              value={ing.name}
+              onChange={e => handleIngredientChange(idx, 'name', e.target.value)}
+              required
+            />
+            <Input
+              className="w-32"
+              placeholder="Amount"
+              value={ing.amount}
+              onChange={e => handleIngredientChange(idx, 'amount', e.target.value)}
+              required
+            />
+            {ingredients.length > 1 && (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => removeIngredient(idx)}
+                className="px-3"
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={addIngredient}
+          className="w-full sm:w-auto"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Ingredient
+        </Button>
+      </div>
     </div>
   );
 }
@@ -86,73 +107,96 @@ export default function RecipesPage() {
   })
 
   return (
-    <DietitianGuard>
-      <div className="max-w-4xl mx-auto p-6 space-y-8">
-        <h2 className="text-3xl font-bold text-foreground">Recipes</h2>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground">Recipes</h2>
+          <p className="text-muted-foreground mt-1">Manage your recipe collection</p>
+        </div>
+      </div>
+
+      {/* Add Recipe Form */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-6">Add New Recipe</h3>
         <form
-          className="bg-card border border-border rounded-lg shadow-sm p-6 flex flex-col gap-4"
+          className="flex flex-col gap-4"
           onSubmit={e => {
             e.preventDefault();
             mutation.mutate({ name, description });
           }}
         >
-          <input
-            className="border border-input rounded-md px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+          <Input
             placeholder="Recipe name"
             value={name}
             onChange={e => setName(e.target.value)}
             required
           />
-          <input
-            className="border border-input rounded-md px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+          <Input
             placeholder="Description"
             value={description}
             onChange={e => setDescription(e.target.value)}
             required
           />
-          {/* Ingredients UI */}
           <IngredientsInput />
-          <button
+          <Button
             type="submit"
-            className="bg-primary text-primary-foreground rounded-md py-2 mt-2 font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            variant="primary"
+            loading={mutation.isLoading}
             disabled={mutation.isLoading}
+            className="w-full sm:w-auto"
           >
+            <Plus className="w-4 h-4 mr-2" />
             {mutation.isLoading ? "Adding..." : "Add Recipe"}
-          </button>
+          </Button>
         </form>
-        {isLoading ? (
-          <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="border border-border rounded-lg p-4 bg-card">
-                <Skeleton className="h-5 w-1/3 mb-2" />
-                <Skeleton className="h-4 w-2/3" />
-              </div>
-            ))}
+      </Card>
+
+      {/* Recipes List */}
+      {isLoading ? (
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-4">
+              <Skeleton className="h-6 w-1/3 mb-2" />
+              <Skeleton className="h-4 w-2/3" />
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <Card className="p-12 text-center">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-8 h-8 text-destructive" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Failed to load recipes</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              {error instanceof Error ? error.message : String(error) || 'Something went wrong. Please try again.'}
+            </p>
+            <Button variant="primary" onClick={() => refetch()}>
+              Retry
+            </Button>
           </div>
-        ) : error ? (
-          <div className="bg-danger/10 border border-danger/20 rounded-lg p-8 text-center text-danger flex flex-col items-center">
-            <span className="text-5xl mb-4">⚠️</span>
-            <div className="font-semibold mb-2 text-lg">Failed to load recipes</div>
-            <div className="text-sm mb-4 text-muted-foreground">{error instanceof Error ? error.message : String(error) || 'Something went wrong. Please try again.'}</div>
-            <button onClick={() => refetch()} className="text-primary hover:underline font-medium">Retry</button>
+        </Card>
+      ) : recipes?.length === 0 ? (
+        <Card className="p-12 text-center">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-6">
+              <ChefHat className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">No recipes yet</h3>
+            <p className="text-sm text-muted-foreground">Start by adding a recipe for your clients to enjoy!</p>
           </div>
-        ) : recipes?.length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground flex flex-col items-center">
-            <span className="text-5xl mb-4">🍲</span>
-            <div className="font-semibold mb-2 text-lg text-card-foreground">No recipes yet</div>
-            <div className="text-sm">Start by adding a recipe for your clients to enjoy!</div>
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {recipes?.map((r: any) => (
-              <li key={r.id} className="border border-border rounded-lg p-4 bg-card hover:shadow-md transition-shadow">
-                <div className="font-semibold text-card-foreground text-lg">{r.name}</div>
-                <div className="text-sm text-muted-foreground mt-1">{r.description}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </DietitianGuard>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {recipes?.map((r: any) => (
+            <Card key={r.id} className="p-6 hover:shadow-lg transition-all duration-200 hover:border-primary/50">
+              <h4 className="font-semibold text-foreground text-lg mb-2">{r.name}</h4>
+              <p className="text-sm text-muted-foreground">{r.description}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
