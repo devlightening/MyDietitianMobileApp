@@ -738,6 +738,43 @@ app.MapPost("/api/auth/client/access-key", async (
 });
 
 // --------------------
+// AUTH — ADMIN LOGIN
+// --------------------
+app.MapPost("/api/auth/admin/login", async (
+    AdminLoginRequest request,
+    AuthDbContext authDb,
+    PasswordHasherService hasher,
+    HttpResponse response) =>
+{
+    var user = await authDb.UserAccounts
+        .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Admin");
+
+    if (user == null || !hasher.VerifyPassword(user, request.Password))
+        return Results.Unauthorized();
+
+    var token = JwtTokenGenerator.GenerateToken(
+        user.Id.ToString(),
+        "Admin",
+        jwtSecret,
+        jwtIssuer,
+        jwtAudience,
+        expiresMinutes
+    );
+
+    var cookieOptions = new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = !app.Environment.IsDevelopment(),
+        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
+        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
+        Path = "/"
+    };
+
+    response.Cookies.Append("access_token", token, cookieOptions);
+    return Results.Ok(new AdminLoginResponse { Token = token });
+}).AllowAnonymous();
+
+// --------------------
 // AUTH — LOGOUT
 // --------------------
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
