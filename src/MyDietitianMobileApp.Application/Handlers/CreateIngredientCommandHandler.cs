@@ -2,7 +2,9 @@ using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Domain.Exceptions;
-using Microsoft.EntityFrameworkCore;
+using MyDietitianMobileApp.Infrastructure.Persistence;
+using System;
+using System.Linq;
 
 namespace MyDietitianMobileApp.Application.Handlers
 {
@@ -20,9 +22,7 @@ namespace MyDietitianMobileApp.Application.Handlers
         public CreateIngredientResult Handle(CreateIngredientCommand command)
         {
             // Check if CanonicalName already exists
-            var exists = _context.Ingredients
-                .Any(i => i.CanonicalName.Equals(command.CanonicalName.Trim(), StringComparison.OrdinalIgnoreCase));
-
+            var exists = _ingredientRepository.ExistsByCanonicalName(command.CanonicalName);
             if (exists)
             {
                 throw new DomainException("INGREDIENT_ALREADY_EXISTS", $"Ingredient with canonical name '{command.CanonicalName}' already exists.");
@@ -43,4 +43,3 @@ namespace MyDietitianMobileApp.Application.Handlers
         }
     }
 }
-

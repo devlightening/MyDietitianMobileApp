@@ -124,6 +124,13 @@ builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKey
 builder.Services.AddScoped<IListAccessKeysByDietitianHandler, ListAccessKeysByDietitianQueryHandler>();
 builder.Services.AddScoped<ICreateRecipeHandler, CreateRecipeCommandHandler>();
 builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
+builder.Services.AddScoped<ISearchIngredientsHandler, SearchIngredientsQueryHandler>();
+
+// Admin Ingredient Management
+builder.Services.AddScoped<IListAllIngredientsHandler, ListAllIngredientsQueryHandler>();
+builder.Services.AddScoped<ICreateIngredientHandler, CreateIngredientCommandHandler>();
+builder.Services.AddScoped<IUpdateIngredientHandler, UpdateIngredientCommandHandler>();
+builder.Services.AddScoped<IToggleIngredientActiveHandler, ToggleIngredientActiveCommandHandler>();
 
 // Compliance handlers
 builder.Services.AddScoped<IMarkComplianceHandler, MarkComplianceCommandHandler>();
@@ -339,11 +346,95 @@ app.MapPost("/api/access-keys/{id}/activate", (
     return Results.Ok(result);
 }).RequireAuthorization("Client");
 
+// Ingredients
+app.MapGet("/api/ingredients/search", (
+    string q,
+    ISearchIngredientsHandler handler) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        return Results.Ok(new { ingredients = Array.Empty<object>() });
+
+    var query = new SearchIngredientsQuery(q.Trim(), maxResults: 20);
+    var result = handler.Handle(query);
+    return Results.Ok(new { ingredients = result.Ingredients });
+});
+
+// Admin Ingredient Management
+app.MapGet("/api/admin/ingredients", (
+    IListAllIngredientsHandler handler) =>
+{
+    var query = new ListAllIngredientsQuery();
+    var result = handler.Handle(query);
+    return Results.Ok(new { ingredients = result.Ingredients });
+}).RequireAuthorization("Admin");
+
+app.MapPost("/api/admin/ingredients", (
+    CreateIngredientRequest request,
+    ICreateIngredientHandler handler) =>
+{
+    var command = new CreateIngredientCommand(
+        request.CanonicalName,
+        request.Aliases,
+        request.IsActive
+    );
+
+    var result = handler.Handle(command);
+    return Results.Ok(new { ingredientId = result.IngredientId });
+}).RequireAuthorization("Admin");
+
+app.MapPut("/api/admin/ingredients/{id}", (
+    Guid id,
+    UpdateIngredientRequest request,
+    IUpdateIngredientHandler handler) =>
+{
+    var command = new UpdateIngredientCommand(
+        id,
+        request.CanonicalName,
+        request.Aliases,
+        request.IsActive
+    );
+
+    var result = handler.Handle(command);
+    return Results.Ok(new { success = result.Success });
+}).RequireAuthorization("Admin");
+
+app.MapPatch("/api/admin/ingredients/{id}/toggle-active", (
+    Guid id,
+    ToggleIngredientActiveRequest request,
+    IToggleIngredientActiveHandler handler) =>
+{
+    var command = new ToggleIngredientActiveCommand(id, request.IsActive);
+    var result = handler.Handle(command);
+    return Results.Ok(new { success = result.Success });
+}).RequireAuthorization("Admin");
+
 // Recipes
-app.MapPost("/api/recipes", (
-    CreateRecipeCommand command,
+app.MapPost("/api/recipes", async (
+    CreateRecipeRequest request,
+    HttpContext httpContext,
+    AuthDbContext authDb,
     ICreateRecipeHandler handler) =>
 {
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    var command = new CreateRecipeCommand(
+        dietitianId,
+        request.Name,
+        request.Description,
+        request.MandatoryIngredientIds,
+        request.OptionalIngredientIds,
+        request.ProhibitedIngredientIds
+    );
+
     var result = handler.Handle(command);
     return Results.Ok(result);
 }).RequireAuthorization("Dietitian");

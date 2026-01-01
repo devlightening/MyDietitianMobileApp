@@ -189,6 +189,28 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.Property(e => e.OptionalSkipped).IsRequired().HasDefaultValue(0);
             });
 
+            // Ingredient
+            modelBuilder.Entity<Ingredient>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.CanonicalName);
+                entity.HasIndex(e => e.IsActive);
+
+                entity.Property(e => e.CanonicalName).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Name).HasMaxLength(200); // Legacy field
+                entity.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
+                
+                // Map Aliases as JSON array (PostgreSQL)
+                // EF Core will serialize/deserialize the collection automatically
+                entity.Property(e => e.Aliases)
+                    .HasConversion(
+                        v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                        v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>())
+                    .HasColumnType("jsonb");
+            });
+
+            // Note: Recipe-Ingredient many-to-many relationships are configured automatically
+            // by EF Core via Recipe entity's navigation properties (MandatoryIngredients, OptionalIngredients, ProhibitedIngredients).
             // Note: Navigation properties (Days, Meals, Items) are configured
             // via HasMany/WithOne above. EF Core will handle the relationships automatically.
         }

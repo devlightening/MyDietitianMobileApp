@@ -6,62 +6,114 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Plus, ChefHat, AlertCircle } from 'lucide-react'
+import { Plus, ChefHat, AlertCircle, X } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { IngredientAutocomplete, IngredientOption } from '@/components/ingredients/IngredientAutocomplete'
 
-function IngredientsInput({ onChange }: { onChange?: (ingredients: { name: string; amount: string }[]) => void }) {
+interface RecipeIngredient {
+  ingredientId: string;
+  ingredientName: string;
+  amount: string;
+  unit: string;
+  isMandatory: boolean;
+}
+
+function RecipeIngredientsInput({ 
+  value, 
+  onChange 
+}: { 
+  value: RecipeIngredient[];
+  onChange: (ingredients: RecipeIngredient[]) => void;
+}) {
   const t = useTranslations('recipes');
-  const [ingredients, setIngredients] = useState([{ name: '', amount: '' }]);
 
-  function handleIngredientChange(idx: number, field: 'name' | 'amount', value: string) {
-    const updated = ingredients.map((ing, i) =>
-      i === idx ? { ...ing, [field]: value } : ing
+  function handleIngredientSelect(idx: number, ingredient: IngredientOption) {
+    const updated = value.map((ing, i) =>
+      i === idx ? { ...ing, ingredientId: ingredient.id, ingredientName: ingredient.canonicalName } : ing
     );
-    setIngredients(updated);
-    onChange?.(updated);
+    onChange(updated);
+  }
+
+  function handleIngredientClear(idx: number) {
+    const updated = value.map((ing, i) =>
+      i === idx ? { ...ing, ingredientId: '', ingredientName: '' } : ing
+    );
+    onChange(updated);
+  }
+
+  function handleIngredientChange(idx: number, field: 'amount' | 'unit', fieldValue: string) {
+    const updated = value.map((ing, i) =>
+      i === idx ? { ...ing, [field]: fieldValue } : ing
+    );
+    onChange(updated);
+  }
+
+  function handleMandatoryToggle(idx: number) {
+    const updated = value.map((ing, i) =>
+      i === idx ? { ...ing, isMandatory: !ing.isMandatory } : ing
+    );
+    onChange(updated);
   }
 
   function addIngredient() {
-    setIngredients([...ingredients, { name: '', amount: '' }]);
+    onChange([...value, { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }]);
   }
 
   function removeIngredient(idx: number) {
-    const updated = ingredients.filter((_, i) => i !== idx);
-    setIngredients(updated);
-    onChange?.(updated);
+    onChange(value.filter((_, i) => i !== idx));
   }
 
   return (
     <div className="space-y-3">
       <label className="text-sm font-medium text-foreground">{t('ingredients')}</label>
-      <div className="space-y-2">
-        {ingredients.map((ing, idx) => (
-          <div key={idx} className="flex gap-2">
-            <Input
-              className="flex-1"
-              placeholder={t('ingredientName')}
-              value={ing.name}
-              onChange={e => handleIngredientChange(idx, 'name', e.target.value)}
-              required
-            />
-            <Input
-              className="w-32"
-              placeholder={t('amount')}
-              value={ing.amount}
-              onChange={e => handleIngredientChange(idx, 'amount', e.target.value)}
-              required
-            />
-            {ingredients.length > 1 && (
+      <div className="space-y-3">
+        {value.map((ing, idx) => (
+          <div key={idx} className="flex flex-col gap-2 p-3 border border-border rounded-md bg-muted/30">
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <IngredientAutocomplete
+                  value={ing.ingredientId ? { id: ing.ingredientId, canonicalName: ing.ingredientName } : null}
+                  onSelect={(ingredient) => handleIngredientSelect(idx, ingredient)}
+                  onClear={() => handleIngredientClear(idx)}
+                  placeholder={t('ingredientName')}
+                />
+              </div>
+              {value.length > 1 && (
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => removeIngredient(idx)}
+                  className="px-3"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                className="flex-1"
+                placeholder={t('amount')}
+                value={ing.amount}
+                onChange={e => handleIngredientChange(idx, 'amount', e.target.value)}
+                type="number"
+                step="0.01"
+              />
+              <Input
+                className="w-32"
+                placeholder={t('unit')}
+                value={ing.unit}
+                onChange={e => handleIngredientChange(idx, 'unit', e.target.value)}
+              />
               <Button
                 type="button"
-                variant="danger"
-                onClick={() => removeIngredient(idx)}
-                className="px-3"
+                variant={ing.isMandatory ? 'primary' : 'secondary'}
+                onClick={() => handleMandatoryToggle(idx)}
+                className="whitespace-nowrap"
               >
-                {t('remove')}
+                {ing.isMandatory ? t('mandatory') : t('optional')}
               </Button>
-            )}
+            </div>
           </div>
         ))}
         <Button
@@ -87,7 +139,13 @@ async function fetchRecipes() {
   }
 }
 
-function createRecipe(data: { name: string; description: string }) {
+async function createRecipe(data: { 
+  name: string; 
+  description: string;
+  mandatoryIngredientIds: string[];
+  optionalIngredientIds: string[];
+  prohibitedIngredientIds: string[];
+}) {
   return api.post('/api/recipes', data)
 }
 
@@ -101,14 +159,53 @@ export default function RecipesPage() {
   })
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
+    { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }
+  ])
+  
   const mutation = useMutation({
     mutationFn: createRecipe,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] })
       setName("")
       setDescription("")
+      setIngredients([{ ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }])
     }
   })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate: All ingredients must be selected
+    const hasUnselectedIngredients = ingredients.some(ing => !ing.ingredientId);
+    if (hasUnselectedIngredients) {
+      // Could show a toast/error message here
+      return;
+    }
+
+    // Separate mandatory and optional ingredients
+    const mandatoryIngredientIds = ingredients
+      .filter(ing => ing.isMandatory && ing.ingredientId)
+      .map(ing => ing.ingredientId);
+    
+    const optionalIngredientIds = ingredients
+      .filter(ing => !ing.isMandatory && ing.ingredientId)
+      .map(ing => ing.ingredientId);
+
+    mutation.mutate({
+      name,
+      description,
+      mandatoryIngredientIds,
+      optionalIngredientIds,
+      prohibitedIngredientIds: [] // TODO: Add UI for prohibited ingredients if needed
+    });
+  };
+
+  const canSubmit = name.trim() && 
+                    description.trim() && 
+                    ingredients.length > 0 && 
+                    ingredients.every(ing => ing.ingredientId) &&
+                    !mutation.isPending;
 
   return (
     <div className="space-y-8">
@@ -125,10 +222,7 @@ export default function RecipesPage() {
         <h3 className="text-lg font-semibold text-foreground mb-6">{t('newRecipe')}</h3>
         <form
           className="flex flex-col gap-4"
-          onSubmit={e => {
-            e.preventDefault();
-            mutation.mutate({ name, description });
-          }}
+          onSubmit={handleSubmit}
         >
           <Input
             placeholder={t('recipeName')}
@@ -142,16 +236,19 @@ export default function RecipesPage() {
             onChange={e => setDescription(e.target.value)}
             required
           />
-          <IngredientsInput />
+          <RecipeIngredientsInput 
+            value={ingredients}
+            onChange={setIngredients}
+          />
           <Button
             type="submit"
             variant="primary"
-            loading={mutation.isLoading}
-            disabled={mutation.isLoading}
+            loading={mutation.isPending}
+            disabled={!canSubmit}
             className="w-full sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
-            {mutation.isLoading ? t('adding') : t('addRecipe')}
+            {mutation.isPending ? t('adding') : t('addRecipe')}
           </Button>
         </form>
       </Card>
@@ -167,41 +264,42 @@ export default function RecipesPage() {
           ))}
         </div>
       ) : error ? (
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="w-8 h-8 text-destructive" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">{t('failedToLoad')}</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              {error instanceof Error ? error.message : String(error) || tCommon('error')}
-            </p>
-            <Button variant="primary" onClick={() => refetch()}>
-              {tCommon('retry')}
-            </Button>
-          </div>
+        <Card className="p-6 text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
+          <p className="text-destructive">{t('failedToLoad')}</p>
+          <Button variant="secondary" onClick={() => refetch()} className="mt-4">
+            {tCommon('retry')}
+          </Button>
         </Card>
-      ) : recipes?.length === 0 ? (
+      ) : !recipes || recipes.length === 0 ? (
         <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-6">
-              <ChefHat className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">{t('noRecipes')}</h3>
-            <p className="text-sm text-muted-foreground">{t('noRecipesDescription')}</p>
-          </div>
+          <ChefHat className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-semibold mb-2">{t('noRecipes')}</h3>
+          <p className="text-muted-foreground">{t('noRecipesDescription')}</p>
         </Card>
       ) : (
         <div className="space-y-4">
-          {recipes?.map((r: any) => (
-            <Card key={r.id} className="p-6 hover:shadow-lg transition-all duration-200 hover:border-primary/50">
-              <h4 className="font-semibold text-foreground text-lg mb-2">{r.name}</h4>
-              <p className="text-sm text-muted-foreground">{r.description}</p>
+          {recipes.map((recipe: any) => (
+            <Card key={recipe.id} className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-foreground mb-1">
+                    {recipe.name}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {recipe.description}
+                  </p>
+                </div>
+                <Link href={`/dashboard/recipes/${recipe.id}`}>
+                  <Button variant="secondary" className="ml-4">
+                    View
+                  </Button>
+                </Link>
+              </div>
             </Card>
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }
-

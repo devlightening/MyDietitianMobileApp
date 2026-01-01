@@ -1,7 +1,5 @@
 {
-  "/dashboard/recipes/page": "app/dashboard/recipes/page.js",
-  "/dashboard/access-keys/page": "app/dashboard/access-keys/page.js",
+  "/auth/login/page": "app/auth/login/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/clients/page": "app/dashboard/clients/page.js",
-  "/auth/login/page": "app/auth/login/page.js"
+  "/dashboard/recipes/page": "app/dashboard/recipes/page.js"
 }

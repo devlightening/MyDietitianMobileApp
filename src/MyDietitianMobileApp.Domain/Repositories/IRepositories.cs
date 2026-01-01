@@ -15,6 +15,9 @@ namespace MyDietitianMobileApp.Domain.Repositories
     public interface IIngredientRepository
     {
         Ingredient GetById(Guid id);
+        IEnumerable<Ingredient> Search(string searchTerm, int maxResults = 20);
+        IEnumerable<Ingredient> GetAll();
+        bool ExistsByCanonicalName(string canonicalName, Guid? excludeId = null);
     }
 
     public interface IRecipeRepository

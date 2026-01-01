@@ -231,6 +231,20 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Aliases")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CanonicalName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsMandatory")
                         .HasColumnType("boolean");
 
@@ -239,7 +253,8 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid?>("RecipeId")
                         .HasColumnType("uuid");
@@ -251,6 +266,10 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CanonicalName");
+
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("RecipeId");
 
