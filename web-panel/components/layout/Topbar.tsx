@@ -2,19 +2,24 @@
 
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
-
-const getPageTitle = (pathname: string): string => {
-  if (pathname === '/dashboard') return 'Dashboard';
-  if (pathname === '/dashboard/recipes') return 'Recipes';
-  if (pathname === '/dashboard/clients') return 'Clients';
-  if (pathname?.startsWith('/dashboard/clients/')) return 'Client Details';
-  if (pathname === '/dashboard/access-keys') return 'Access Keys';
-  return 'Dashboard';
-};
+import { LanguageSwitcher } from '@/components/theme/LanguageSwitcher';
+import { useTranslations } from 'next-intl';
 
 export function Topbar() {
   const pathname = usePathname();
-  const title = getPageTitle(pathname || '');
+  const tCommon = useTranslations('common');
+  const tClients = useTranslations('clients');
+
+  const getPageTitle = (): string => {
+    if (pathname === '/dashboard') return tCommon('dashboard');
+    if (pathname === '/dashboard/recipes') return tCommon('recipes');
+    if (pathname === '/dashboard/clients') return tCommon('clients');
+    if (pathname?.startsWith('/dashboard/clients/')) return tClients('title');
+    if (pathname === '/dashboard/access-keys') return tCommon('accessKeys');
+    return tCommon('dashboard');
+  };
+
+  const title = getPageTitle();
 
   return (
     <header className="h-16 w-full flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm border-b border-border/50 sticky top-0 z-30">
@@ -22,6 +27,7 @@ export function Topbar() {
         <h1 className="text-xl font-semibold text-foreground">{title}</h1>
       </div>
       <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <ThemeToggle />
       </div>
     </header>

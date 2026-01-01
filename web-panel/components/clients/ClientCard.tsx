@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { ClientStatusBadge } from './ClientStatusBadge';
 import { ArrowRight, Clock, UtensilsCrossed } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslations } from 'next-intl';
 
 export interface ClientCardData {
   clientId: string;
@@ -49,6 +50,7 @@ function getComplianceColor(percentage: number, hasActivity: boolean): string {
 }
 
 export function ClientCard({ client }: ClientCardProps) {
+  const t = useTranslations('clients');
   const hasActivity = client.lastActivity !== null;
   const complianceColor = getComplianceColor(client.todayCompliancePercentage, hasActivity);
   
@@ -82,7 +84,7 @@ export function ClientCard({ client }: ClientCardProps) {
                 <span className="text-sm text-muted-foreground">%</span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Today's compliance</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('compliance')}</p>
           </div>
 
           {/* Details */}
@@ -108,7 +110,7 @@ export function ClientCard({ client }: ClientCardProps) {
           {/* CTA */}
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex items-center gap-2 text-sm font-medium text-primary group-hover:gap-3 transition-all">
-              <span>View details</span>
+              <span>{t('viewDetails')}</span>
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>

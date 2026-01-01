@@ -12,18 +12,20 @@ import {
 } from 'lucide-react';
 import { logout } from '@/lib/auth';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslations } from 'next-intl';
 
-const menu = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Recipes', href: '/dashboard/recipes', icon: ChefHat },
-  { label: 'Clients', href: '/dashboard/clients', icon: Users },
-  { label: 'Access Keys', href: '/dashboard/access-keys', icon: Key },
+const menuItems = [
+  { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
+  { key: 'clients', href: '/dashboard/clients', icon: Users },
+  { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
 ];
 
 export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const t = useTranslations('common');
 
   const handleLogout = async () => {
     await logout();
@@ -57,7 +59,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
 
       {/* Navigation */}
       <nav className="flex-1 flex flex-col gap-1 px-3 py-4 overflow-y-auto">
-        {menu.map((item) => {
+        {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || 
             (item.href !== '/dashboard' && pathname?.startsWith(item.href));
@@ -84,11 +86,11 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
                 <span className={cn(
                   'text-sm',
                   isActive && 'font-medium'
-                )}>{item.label}</span>
+                )}>{t(item.key)}</span>
               )}
               {collapsed && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
-                  {item.label}
+                  {t(item.key)}
                 </div>
               )}
             </Link>
@@ -109,11 +111,11 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
         >
           <LogOut className="w-5 h-5 flex-shrink-0 group-hover:text-destructive" />
           {!collapsed && (
-            <span className="text-sm font-medium">Logout</span>
+            <span className="text-sm font-medium">{t('logout')}</span>
           )}
           {collapsed && (
             <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
-              Logout
+              {t('logout')}
             </div>
           )}
         </button>

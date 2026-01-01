@@ -1,0 +1,25 @@
+"use strict";
+/*
+ * ATTENTION: An "eval-source-map" devtool has been used.
+ * This devtool is neither made for production nor for readable output files.
+ * It uses "eval()" calls to create a separate source file with attached SourceMaps in the browser devtools.
+ * If you are trying to read the output file, select a different devtool (https://webpack.js.org/configuration/devtool/)
+ * or disable the default devtool with "devtool: false".
+ * If you are looking for production-ready output files, see mode: "production" (https://webpack.js.org/configuration/mode/).
+ */
+exports.id = "_rsc_messages_tr_json";
+exports.ids = ["_rsc_messages_tr_json"];
+exports.modules = {
+
+/***/ "(rsc)/./messages/tr.json":
+/*!**************************!*\
+  !*** ./messages/tr.json ***!
+  \**************************/
+/***/ ((module) => {
+
+module.exports = /*#__PURE__*/JSON.parse('{"common":{"clients":"Danışanlar","recipes":"Tarifler","accessKeys":"Erişim Anahtarları","dashboard":"Dashboard","logout":"Çıkış Yap","welcomeBack":"Hoş geldiniz!","refresh":"Yenile","retry":"Tekrar Dene","back":"Geri","loading":"Yükleniyor...","error":"Hata","noData":"Veri Yok"},"dashboard":{"title":"Dashboard Hazır","subtitle":"Henüz tarif veya erişim anahtarı yok. Danışanlarınız için tarif ekleyerek veya erişim anahtarı oluşturarak başlayın.","welcomeSubtitle":"Hesabınızın genel görünümü","overview":"Genel Bakış"},"clients":{"title":"Danışan Detayları","subtitle":"Bugünün uyum özeti","noClients":"Henüz danışan yok","noClientsDescription":"Danışanlarınız için erişim anahtarları oluşturarak başlayın.","lastActivity":"Son Aktivite","currentMeal":"Mevcut Öğün","compliance":"Uyum","viewDetails":"Detayları Görüntüle","failedToLoad":"Danışan verisi yüklenemedi","backToClients":"Danışanlara Dön","dailyTimeline":"Günlük Zaman Çizelgesi","complianceSummary":"Uyum Özeti","weeklyTrend":"Haftalık Trend","insights":"İçgörüler","averageCompliance":"Ortalama Uyum","bestDay":"En İyi Gün","worstDay":"En Kötü Gün","noMealsPlanned":"Bu gün için öğün planlanmamış"},"recipes":{"title":"Tarifler","subtitle":"Tarif koleksiyonunuzu yönetin","addRecipe":"Tarif Ekle","newRecipe":"Yeni Tarif","recipeName":"Tarif Adı","description":"Açıklama","ingredients":"Malzemeler","addIngredient":"Malzeme Ekle","ingredientName":"Malzeme adı","amount":"Miktar","remove":"Kaldır","noRecipes":"Henüz tarif yok","noRecipesDescription":"Müşterilerinizin beğeneceği bir tarif ekleyerek başlayın!","failedToLoad":"Tarifler yüklenemedi","adding":"Ekleniyor...","add":"Ekle"},"accessKeys":{"title":"Erişim Anahtarları","subtitle":"Danışanlarınızın yemek planlarına ve tariflere erişmeleri için erişim anahtarları oluşturun.","generateKey":"Yeni Erişim Anahtarı Oluştur","clientId":"Danışan ID","clientIdPlaceholder":"Danışan tanımlayıcısını girin","startDate":"Başlangıç Tarihi","endDate":"Bitiş Tarihi","noKeys":"Henüz erişim anahtarı yok","noKeysDescription":"Bir sonraki danışanınız için bir erişim anahtarı oluşturun!","validFrom":"Geçerli","to":"ile","activate":"Etkinleştir","creating":"Oluşturuluyor...","create":"Anahtar Oluştur"},"compliance":{"done":"Yapıldı","skipped":"Atlandı","alternative":"Alternatif","notMarked":"İşaretlenmedi","mandatory":"Zorunlu","optional":"İsteğe Bağlı","breakfast":"Kahvaltı","lunch":"Öğle Yemeği","dinner":"Akşam Yemeği","snack":"Ara Öğün"},"insights":{"lowCompliance":"Düşük Uyum","lowComplianceMessage":"Ortalama uyum {percentage}%. Danışan ek destek gerektirebilir.","decliningTrend":"Düşüş Trendi","decliningTrendMessage":"Son birkaç gündür uyum düşüyor. Danışanla iletişime geçmeyi düşünün.","improvingTrend":"İyileşme Trendi","improvingTrendMessage":"Uyum yükseliyor. Harika ilerleme!","breakfastCompliance":"Kahvaltı Uyumu","breakfastComplianceMessage":"Bugün {count} zorunlu kahvaltı öğesi atlandı."}}');
+
+/***/ })
+
+};
+;

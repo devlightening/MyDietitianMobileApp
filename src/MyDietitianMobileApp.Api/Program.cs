@@ -15,6 +15,7 @@ using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Api.Utils;
 using MyDietitianMobileApp.Api.Models;
+using MyDietitianMobileApp.Api.Middleware;
 using Npgsql;
 using System.Text;
 using System.Threading.Tasks;
@@ -120,6 +121,7 @@ builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 // --------------------
 builder.Services.AddScoped<ICreateAccessKeyHandler, CreateAccessKeyCommandHandler>();
 builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKeyForClientCommandHandler>();
+builder.Services.AddScoped<IListAccessKeysByDietitianHandler, ListAccessKeysByDietitianQueryHandler>();
 builder.Services.AddScoped<ICreateRecipeHandler, CreateRecipeCommandHandler>();
 builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
 
@@ -290,11 +292,35 @@ app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Global Exception Middleware (must be after UseAuthorization but before endpoints)
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 // --------------------
 // API ENDPOINTS
 // --------------------
 
 // Access Keys
+app.MapGet("/api/access-keys", async (
+    HttpContext httpContext,
+    AuthDbContext authDb,
+    IListAccessKeysByDietitianHandler handler) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+    
+    var query = new ListAccessKeysByDietitianQuery(dietitianId);
+    var result = handler.Handle(query);
+    return Results.Ok(result);
+}).RequireAuthorization("Dietitian");
+
 app.MapPost("/api/access-keys", (
     CreateAccessKeyCommand command,
     ICreateAccessKeyHandler handler) =>
@@ -322,14 +348,26 @@ app.MapPost("/api/recipes", (
     return Results.Ok(result);
 }).RequireAuthorization("Dietitian");
 
-app.MapGet("/api/recipes", (
-    Guid dietitianId,
+app.MapGet("/api/recipes", async (
+    HttpContext httpContext,
+    AuthDbContext authDb,
     IListRecipesByActiveDietitianHandler handler) =>
 {
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+    
     var query = new ListRecipesByActiveDietitianQuery(dietitianId);
     var result = handler.Handle(query);
     return Results.Ok(result);
-}).RequireAuthorization();
+}).RequireAuthorization("Dietitian");
 
 // --------------------
 // COMPLIANCE ENDPOINTS
