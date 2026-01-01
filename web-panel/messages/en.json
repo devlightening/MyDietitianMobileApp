@@ -7,11 +7,13 @@
     "logout": "Logout",
     "welcomeBack": "Welcome back!",
     "refresh": "Refresh",
+    "refreshing": "Refreshing...",
     "retry": "Retry",
     "back": "Back",
     "loading": "Loading...",
     "error": "Error",
-    "noData": "No Data"
+    "noData": "No Data",
+    "lastUpdated": "Last updated at {time}"
   },
   "dashboard": {
     "title": "Your dashboard is ready",
@@ -98,5 +100,16 @@
     "improvingTrendMessage": "Compliance is trending upward. Great progress!",
     "breakfastCompliance": "Breakfast Compliance",
     "breakfastComplianceMessage": "{count} mandatory breakfast item(s) skipped today."
+  },
+  "errors": {
+    "dietitianNotFound": "Dietitian account not found or inactive",
+    "ingredientNotFound": "Ingredient not found",
+    "unauthorized": "Please log in again",
+    "notFound": "The requested resource was not found",
+    "invalidOperation": "Invalid operation",
+    "invalidArgument": "Invalid parameter",
+    "generic": "Something went wrong. Please try again.",
+    "networkError": "Connection error. Please check your internet connection.",
+    "serverError": "Server error. Please try again later."
   }
 }

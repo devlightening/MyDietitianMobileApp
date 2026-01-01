@@ -1,6 +1,7 @@
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
+using MyDietitianMobileApp.Domain.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,27 +21,27 @@ namespace MyDietitianMobileApp.Application.Handlers
         {
             var dietitian = _dietitianRepository.GetById(command.DietitianId);
             if (dietitian == null || !dietitian.IsActive)
-                throw new InvalidOperationException("Dietitian not found or inactive.");
+                throw new DomainException("DIETITIAN_NOT_FOUND", "Dietitian not found or inactive.");
             var recipe = new Recipe(Guid.NewGuid(), command.DietitianId, command.Name, command.Description);
             foreach (var ingredientId in command.MandatoryIngredientIds)
             {
                 var ingredient = _ingredientRepository.GetById(ingredientId);
                 if (ingredient == null)
-                    throw new InvalidOperationException($"Ingredient {ingredientId} not found.");
+                    throw new DomainException("INGREDIENT_NOT_FOUND", $"Ingredient {ingredientId} not found.");
                 recipe.AddMandatoryIngredient(ingredient);
             }
             foreach (var ingredientId in command.OptionalIngredientIds)
             {
                 var ingredient = _ingredientRepository.GetById(ingredientId);
                 if (ingredient == null)
-                    throw new InvalidOperationException($"Ingredient {ingredientId} not found.");
+                    throw new DomainException("INGREDIENT_NOT_FOUND", $"Ingredient {ingredientId} not found.");
                 recipe.AddOptionalIngredient(ingredient);
             }
             foreach (var ingredientId in command.ProhibitedIngredientIds)
             {
                 var ingredient = _ingredientRepository.GetById(ingredientId);
                 if (ingredient == null)
-                    throw new InvalidOperationException($"Ingredient {ingredientId} not found.");
+                    throw new DomainException("INGREDIENT_NOT_FOUND", $"Ingredient {ingredientId} not found.");
                 recipe.AddProhibitedIngredient(ingredient);
             }
             dietitian.AddRecipe(recipe);

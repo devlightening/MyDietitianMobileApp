@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using MyDietitianMobileApp.Domain.Exceptions;
 
 namespace MyDietitianMobileApp.Api.Middleware;
 
@@ -35,22 +36,47 @@ public class GlobalExceptionMiddleware
     {
         context.Response.ContentType = "application/json";
         
-        // Determine status code based on exception type
-        var statusCode = exception switch
+        // Determine status code and error code based on exception type
+        var (statusCode, errorCode, message) = exception switch
         {
-            UnauthorizedAccessException => HttpStatusCode.Unauthorized,
-            InvalidOperationException => HttpStatusCode.BadRequest,
-            ArgumentException => HttpStatusCode.BadRequest,
-            KeyNotFoundException => HttpStatusCode.NotFound,
-            _ => HttpStatusCode.InternalServerError
+            DomainException de => (
+                HttpStatusCode.BadRequest,
+                de.Code,
+                de.Message
+            ),
+            UnauthorizedAccessException => (
+                HttpStatusCode.Unauthorized,
+                "UNAUTHORIZED",
+                "Unauthorized access"
+            ),
+            InvalidOperationException => (
+                HttpStatusCode.BadRequest,
+                "INVALID_OPERATION",
+                exception.Message
+            ),
+            ArgumentException => (
+                HttpStatusCode.BadRequest,
+                "INVALID_ARGUMENT",
+                exception.Message
+            ),
+            KeyNotFoundException => (
+                HttpStatusCode.NotFound,
+                "NOT_FOUND",
+                exception.Message
+            ),
+            _ => (
+                HttpStatusCode.InternalServerError,
+                "INTERNAL_SERVER_ERROR",
+                "An unexpected error occurred"
+            )
         };
 
         context.Response.StatusCode = (int)statusCode;
 
         var response = new
         {
-            error = exception.GetType().Name,
-            message = exception.Message,
+            error = errorCode,
+            message = message,
             // Only include stack trace in development
             stackTrace = _env.IsDevelopment() ? exception.StackTrace : null
         };

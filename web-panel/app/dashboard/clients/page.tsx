@@ -1,81 +1,86 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { useClients } from '@/hooks/useClients';
 import { ClientGrid } from '@/components/clients/ClientGrid';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { RefreshCw, Users, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
-
-interface LiveClientDto {
-  clientId: string; // GUID as string from backend
-  clientName: string;
-  lastActivity: string | null;
-  todayCompliancePercentage: number;
-  currentMeal: string | null;
-  lastMealItem: string | null;
-}
-
-// Backend returns GetLiveClientsResult which has ActiveClients property
-// Default .NET JSON serialization uses PascalCase
-interface GetLiveClientsResponse {
-  ActiveClients: LiveClientDto[];
-}
-
-async function fetchLiveClients(): Promise<LiveClientDto[]> {
-  const res = await api.get<GetLiveClientsResponse>('/api/dietitian/live-clients');
-  return res.data.ActiveClients || [];
-}
+import { getErrorTranslationKey } from '@/lib/error-utils';
+import { ApiError } from '@/lib/api';
+import EmptyState from '@/components/states/EmptyState';
+import ErrorState from '@/components/states/ErrorState';
+import ClientCardSkeleton from '@/components/skeletons/ClientCardSkeleton';
 
 export default function ClientsPage() {
   const t = useTranslations('clients');
   const tCommon = useTranslations('common');
-  const [manualRefetchKey, setManualRefetchKey] = useState(0);
+  const tErrors = useTranslations('errors');
 
-  const { data: clients, isLoading, error, refetch, isRefetching } = useQuery({
-    queryKey: ['live-clients', manualRefetchKey],
-    queryFn: fetchLiveClients,
-    refetchInterval: 30000, // Poll every 30 seconds
-    refetchIntervalInBackground: true,
-  });
+  const {
+    clients,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+    lastUpdated,
+  } = useClients();
 
-  const handleManualRefresh = () => {
-    setManualRefetchKey(prev => prev + 1);
-    refetch();
-  };
-
+  // 1️⃣ Loading
   if (isLoading) {
     return (
       <div className="space-y-8">
-        {/* Header Skeleton */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <Skeleton className="h-8 w-32 mb-2" />
-            <Skeleton className="h-4 w-64" />
+            <h2 className="text-2xl font-semibold text-foreground">{t('title')}</h2>
+            <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
           </div>
-          <Skeleton className="h-10 w-24" />
         </div>
 
         {/* Grid Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="p-6">
-              <Skeleton className="h-6 w-3/4 mb-4" />
-              <Skeleton className="h-12 w-20 mb-4" />
-              <Skeleton className="h-4 w-full mb-2" />
-              <Skeleton className="h-4 w-2/3" />
-            </Card>
+            <ClientCardSkeleton key={i} />
           ))}
         </div>
       </div>
     );
   }
 
-  if (error) {
+  // 2️⃣ Error
+  if (isError) {
+    const errorMessage = error && typeof error === 'object' && 'code' in error
+      ? tErrors(getErrorTranslationKey((error as ApiError).code) as any)
+      : error && typeof error === 'object' && 'message' in error
+        ? (error as ApiError).message
+        : tCommon('error');
+
+    return (
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">{t('title')}</h2>
+            <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
+          </div>
+        </div>
+
+        {/* Error State */}
+        <ErrorState
+          title={t('failedToLoad')}
+          message={errorMessage}
+          onRetry={() => refetch()}
+          retryLabel={tCommon('retry')}
+          isRetrying={isRefetching}
+        />
+      </div>
+    );
+  }
+
+  // 3️⃣ Empty
+  if (clients.length === 0) {
     return (
       <div className="space-y-8">
         {/* Header */}
@@ -86,7 +91,7 @@ export default function ClientsPage() {
           </div>
           <Button
             variant="secondary"
-            onClick={handleManualRefresh}
+            onClick={() => refetch()}
             disabled={isRefetching}
           >
             <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
@@ -94,28 +99,16 @@ export default function ClientsPage() {
           </Button>
         </div>
 
-        {/* Error State */}
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="w-8 h-8 text-destructive" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">{t('failedToLoad')}</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              {error instanceof Error ? error.message : tCommon('error')}
-            </p>
-            <Button variant="primary" onClick={handleManualRefresh} disabled={isRefetching}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
-              {tCommon('retry')}
-            </Button>
-          </div>
-        </Card>
+        {/* Empty State */}
+        <EmptyState
+          title={t('noClients')}
+          description={t('noClientsDescription')}
+        />
       </div>
     );
   }
 
-  const hasClients = clients && clients.length > 0;
-
+  // 4️⃣ Success
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -124,39 +117,32 @@ export default function ClientsPage() {
           <h2 className="text-2xl font-semibold text-foreground">{t('title')}</h2>
           <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
         </div>
-        <Button
-          variant="secondary"
-          onClick={handleManualRefresh}
-          disabled={isRefetching}
-        >
-          <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
-          {tCommon('refresh')}
-        </Button>
+        <div className="flex items-center gap-4">
+          {lastUpdated && (
+            <p className="text-sm text-muted-foreground">
+              {tCommon('lastUpdated', { time: lastUpdated.toLocaleTimeString() })}
+            </p>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
+            {isRefetching ? tCommon('refreshing') : tCommon('refresh')}
+          </Button>
+        </div>
       </div>
 
-      {/* Content */}
-      {!hasClients ? (
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-6">
-              <Users className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">{t('noClients')}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t('noClientsDescription')}
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <ClientGrid clients={clients.map(c => ({
-          clientId: c.clientId,
-          clientName: c.clientName,
-          todayCompliancePercentage: c.todayCompliancePercentage,
-          lastActivity: c.lastActivity,
-          currentMeal: c.currentMeal,
-          lastMealItem: c.lastMealItem,
-        }))} />
-      )}
+      {/* Client Grid */}
+      <ClientGrid clients={clients.map(c => ({
+        clientId: c.clientId,
+        clientName: c.clientName,
+        todayCompliancePercentage: c.todayCompliancePercentage,
+        lastActivity: c.lastActivity,
+        currentMeal: c.currentMeal,
+        lastMealItem: c.lastMealItem,
+      }))} />
     </div>
   );
 }

@@ -7,11 +7,13 @@
     "logout": "Çıkış Yap",
     "welcomeBack": "Hoş geldiniz!",
     "refresh": "Yenile",
+    "refreshing": "Yenileniyor...",
     "retry": "Tekrar Dene",
     "back": "Geri",
     "loading": "Yükleniyor...",
     "error": "Hata",
-    "noData": "Veri Yok"
+    "noData": "Veri Yok",
+    "lastUpdated": "Son güncelleme: {time}"
   },
   "dashboard": {
     "title": "Dashboard Hazır",
@@ -94,5 +96,16 @@
     "improvingTrendMessage": "Uyum yükseliyor. Harika ilerleme!",
     "breakfastCompliance": "Kahvaltı Uyumu",
     "breakfastComplianceMessage": "Bugün {count} zorunlu kahvaltı öğesi atlandı."
+  },
+  "errors": {
+    "dietitianNotFound": "Diyetisyen hesabı bulunamadı veya aktif değil",
+    "ingredientNotFound": "Malzeme bulunamadı",
+    "unauthorized": "Lütfen tekrar giriş yapın",
+    "notFound": "İstenen kaynak bulunamadı",
+    "invalidOperation": "Geçersiz işlem",
+    "invalidArgument": "Geçersiz parametre",
+    "generic": "Bir hata oluştu. Lütfen tekrar deneyin.",
+    "networkError": "Bağlantı hatası. İnternet bağlantınızı kontrol edin.",
+    "serverError": "Sunucu hatası. Lütfen daha sonra tekrar deneyin."
   }
 }
