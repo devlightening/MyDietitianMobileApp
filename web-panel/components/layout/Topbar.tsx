@@ -9,8 +9,15 @@ export function Topbar() {
   const pathname = usePathname();
   const tCommon = useTranslations('common');
   const tClients = useTranslations('clients');
+  const tAdmin = useTranslations('admin.ingredients');
 
   const getPageTitle = (): string => {
+    // Admin routes
+    if (pathname === '/admin/ingredients') {
+      return tAdmin('title');
+    }
+    
+    // Dietitian routes
     if (pathname === '/dashboard') return tCommon('dashboard');
     if (pathname === '/dashboard/recipes') return tCommon('recipes');
     if (pathname === '/dashboard/clients') return tCommon('clients');

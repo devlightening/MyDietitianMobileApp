@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/api';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AdminAppLayout } from '@/components/layout/AdminAppLayout';
 
 export default function AdminLayout({
   children,
@@ -12,9 +12,16 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
+    // Don't check auth on login page
+    if (pathname === '/admin/login') {
+      setIsChecking(false);
+      return;
+    }
+
     // Check if user has admin token by trying to access an admin endpoint
     const checkAdminAccess = async () => {
       try {
@@ -22,9 +29,9 @@ export default function AdminLayout({
         // If we get here, user has admin access
         setIsChecking(false);
       } catch (error: any) {
-        // If 401 or 403, redirect to login
+        // If 401 or 403, redirect to admin login
         if (error?.status === 401 || error?.status === 403) {
-          router.push('/auth/login');
+          router.push('/admin/login');
         } else {
           setIsChecking(false);
         }
@@ -32,19 +39,24 @@ export default function AdminLayout({
     };
 
     checkAdminAccess();
-  }, [router]);
+  }, [router, pathname]);
+
+  // Don't wrap login page with AdminAppLayout
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
 
   if (isChecking) {
     return (
-      <AppLayout>
+      <AdminAppLayout>
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-64 w-full" />
         </div>
-      </AppLayout>
+      </AdminAppLayout>
     );
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return <AdminAppLayout>{children}</AdminAppLayout>;
 }
 

@@ -54,15 +54,15 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
 
         public bool ExistsByCanonicalName(string canonicalName, Guid? excludeId = null)
         {
-            var query = _context.Ingredients
-                .Where(i => i.CanonicalName.Equals(canonicalName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var normalized = canonicalName.Trim().ToLower();
+            var query = _context.Ingredients.AsQueryable();
 
             if (excludeId.HasValue)
             {
                 query = query.Where(i => i.Id != excludeId.Value);
             }
 
-            return query.Any();
+            return query.Any(i => i.CanonicalName.ToLower() == normalized);
         }
     }
 }

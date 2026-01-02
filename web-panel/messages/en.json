@@ -144,6 +144,16 @@
       "activateSuccess": "Ingredient activated",
       "deactivateSuccess": "Ingredient deactivated",
       "errorOccurred": "An error occurred"
+    },
+    "login": {
+      "title": "Admin Login",
+      "subtitle": "Sign in to access the admin panel",
+      "email": "Email",
+      "emailPlaceholder": "admin@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "submit": "Sign In",
+      "loginError": "Invalid email or password"
     }
   }
 }

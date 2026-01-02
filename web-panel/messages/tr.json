@@ -140,6 +140,16 @@
       "activateSuccess": "Malzeme aktifleştirildi",
       "deactivateSuccess": "Malzeme pasifleştirildi",
       "errorOccurred": "Bir hata oluştu"
+    },
+    "login": {
+      "title": "Admin Girişi",
+      "subtitle": "Yönetim paneline erişmek için giriş yapın",
+      "email": "E-posta",
+      "emailPlaceholder": "admin@example.com",
+      "password": "Şifre",
+      "passwordPlaceholder": "Şifrenizi girin",
+      "submit": "Giriş Yap",
+      "loginError": "E-posta veya şifre hatalı"
     }
   }
 }
