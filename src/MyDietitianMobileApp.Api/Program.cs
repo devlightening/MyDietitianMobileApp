@@ -213,6 +213,11 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("Dietitian", policy => policy.RequireRole("Dietitian"));
     options.AddPolicy("Client", policy => policy.RequireRole("Client"));
+    options.AddPolicy("Admin", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim(ClaimTypes.Role, "Admin");
+    });
 });
 
 var app = builder.Build();

@@ -13,7 +13,8 @@
     "loading": "Loading...",
     "error": "Error",
     "noData": "No Data",
-    "lastUpdated": "Last updated at {time}"
+    "lastUpdated": "Last updated at {time}",
+    "cancel": "Cancel"
   },
   "dashboard": {
     "title": "Your dashboard is ready",
@@ -114,5 +115,35 @@
     "generic": "Something went wrong. Please try again.",
     "networkError": "Connection error. Please check your internet connection.",
     "serverError": "Server error. Please try again later."
+  },
+  "admin": {
+    "ingredients": {
+      "title": "Ingredient Management",
+      "subtitle": "Manage the global ingredient catalog",
+      "canonicalName": "Canonical Name",
+      "aliases": "Aliases",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "passive": "Passive",
+      "edit": "Edit",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "createIngredient": "New Ingredient",
+      "editIngredient": "Edit Ingredient",
+      "canonicalNamePlaceholder": "e.g., Lettuce",
+      "aliasPlaceholder": "Add alias",
+      "isActive": "Active",
+      "create": "Create",
+      "update": "Update",
+      "noIngredients": "No ingredients yet",
+      "noIngredientsDescription": "Start by adding a new ingredient",
+      "failedToLoad": "Failed to load ingredients",
+      "createSuccess": "Ingredient created successfully",
+      "updateSuccess": "Ingredient updated successfully",
+      "activateSuccess": "Ingredient activated",
+      "deactivateSuccess": "Ingredient deactivated",
+      "errorOccurred": "An error occurred"
+    }
   }
 }

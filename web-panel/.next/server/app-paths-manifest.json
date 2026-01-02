@@ -1,5 +1,18 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(dashboard)/clients/[clientId]/page": "app/(dashboard)/clients/[clientId]/page.js",
+  "/(dashboard)/access-keys/page": "app/(dashboard)/access-keys/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js",
+  "/auth/client-access/page": "app/auth/client-access/page.js",
+  "/(dashboard)/clients/page": "app/(dashboard)/clients/page.js",
+  "/(dashboard)/recipes/page": "app/(dashboard)/recipes/page.js",
+  "/admin/ingredients/page": "app/admin/ingredients/page.js",
   "/auth/login/page": "app/auth/login/page.js",
+  "/auth/register/page": "app/auth/register/page.js",
+  "/dashboard/access-keys/page": "app/dashboard/access-keys/page.js",
+  "/dashboard/clients/page": "app/dashboard/clients/page.js",
+  "/dashboard/clients/[clientId]/page": "app/dashboard/clients/[clientId]/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/recipes/page": "app/dashboard/recipes/page.js"
+  "/dashboard/recipes/page": "app/dashboard/recipes/page.js",
+  "/showcase/page": "app/showcase/page.js"
 }

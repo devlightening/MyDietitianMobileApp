@@ -13,7 +13,8 @@
     "loading": "Yükleniyor...",
     "error": "Hata",
     "noData": "Veri Yok",
-    "lastUpdated": "Son güncelleme: {time}"
+    "lastUpdated": "Son güncelleme: {time}",
+    "cancel": "İptal"
   },
   "dashboard": {
     "title": "Dashboard Hazır",
@@ -110,5 +111,35 @@
     "generic": "Bir hata oluştu. Lütfen tekrar deneyin.",
     "networkError": "Bağlantı hatası. İnternet bağlantınızı kontrol edin.",
     "serverError": "Sunucu hatası. Lütfen daha sonra tekrar deneyin."
+  },
+  "admin": {
+    "ingredients": {
+      "title": "Malzeme Yönetimi",
+      "subtitle": "Global malzeme kataloğunu yönetin",
+      "canonicalName": "Kanonik İsim",
+      "aliases": "Takma İsimler",
+      "status": "Durum",
+      "actions": "İşlemler",
+      "active": "Aktif",
+      "passive": "Pasif",
+      "edit": "Düzenle",
+      "activate": "Aktifleştir",
+      "deactivate": "Pasifleştir",
+      "createIngredient": "Yeni Malzeme",
+      "editIngredient": "Malzeme Düzenle",
+      "canonicalNamePlaceholder": "Örn: Marul",
+      "aliasPlaceholder": "Takma isim ekle",
+      "isActive": "Aktif",
+      "create": "Oluştur",
+      "update": "Güncelle",
+      "noIngredients": "Henüz malzeme yok",
+      "noIngredientsDescription": "Yeni bir malzeme ekleyerek başlayın",
+      "failedToLoad": "Malzemeler yüklenemedi",
+      "createSuccess": "Malzeme başarıyla oluşturuldu",
+      "updateSuccess": "Malzeme başarıyla güncellendi",
+      "activateSuccess": "Malzeme aktifleştirildi",
+      "deactivateSuccess": "Malzeme pasifleştirildi",
+      "errorOccurred": "Bir hata oluştu"
+    }
   }
 }
