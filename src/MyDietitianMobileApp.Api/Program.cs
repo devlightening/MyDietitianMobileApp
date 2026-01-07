@@ -120,6 +120,11 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 
 // --------------------
+// HTTP Context (for accessing JWT claims in handlers)
+// --------------------
+builder.Services.AddHttpContextAccessor();
+
+// --------------------
 // MediatR (CQRS)
 // --------------------
 builder.Services.AddMediatR(cfg =>
@@ -147,6 +152,9 @@ builder.Services.AddScoped<IGetLiveClientsHandler, GetLiveClientsQueryHandler>()
 
 // Compliance services
 builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
+
+// Diet Plan services
+builder.Services.AddScoped<IAlternativeMealDecisionService, AlternativeMealDecisionService>();
 
 // --------------------
 // CORS (for local Next.js dev)
@@ -623,6 +631,138 @@ app.MapGet("/api/dietitian/live-clients", async (
         return Results.Problem($"An error occurred: {ex.Message}");
     }
 }).RequireAuthorization("Dietitian");
+
+// --------------------
+// DIET PLAN ENDPOINTS
+// --------------------
+
+// POST /api/diet-plans - Create a new diet plan
+app.MapPost("/api/diet-plans", async (
+    [FromBody] CreateDietPlanCommand command,
+    HttpContext httpContext,
+    AuthDbContext authDb,
+    IMediator mediator) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    // Override dietitian ID from token
+    var createCommand = new CreateDietPlanCommand(
+        dietitianId,
+        command.ClientId,
+        command.Name,
+        command.StartDate,
+        command.EndDate,
+        command.Days);
+
+    try
+    {
+        var result = await mediator.Send(createCommand);
+        return result.Success 
+            ? Results.Ok(result) 
+            : Results.BadRequest(result.ErrorMessage);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Dietitian");
+
+// GET /api/diet-plans/{clientId} - Get diet plan for a client
+app.MapGet("/api/diet-plans/{clientId}", async (
+    Guid clientId,
+    HttpContext httpContext,
+    AuthDbContext authDb,
+    IMediator mediator) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    try
+    {
+        var query = new GetDietPlanByClientQuery(dietitianId, clientId);
+        var result = await mediator.Send(query);
+        return result != null 
+            ? Results.Ok(result) 
+            : Results.NotFound("No active diet plan found for this client.");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Dietitian");
+
+// POST /api/diet-plans/decide-alternative - Get alternative recommendation
+app.MapPost("/api/diet-plans/decide-alternative", async (
+    [FromBody] DecideAlternativeMealQuery query,
+    HttpContext httpContext,
+    AuthDbContext authDb,
+    IMediator mediator) =>
+{
+    // Get dietitian ID from JWT
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
+    if (user == null || !user.LinkedDietitianId.HasValue)
+        return Results.Unauthorized();
+
+    var dietitianId = user.LinkedDietitianId.Value;
+
+    // Override dietitian ID from token
+    var decisionQuery = new DecideAlternativeMealQuery(
+        dietitianId,
+        query.PlannedRecipeId,
+        query.MealType,
+        query.ClientAvailableIngredients);
+
+    try
+    {
+        var result = await mediator.Send(decisionQuery);
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Dietitian");
+
+// GET /api/diet-plans/today - Get today's plan for mobile client
+app.MapGet("/api/diet-plans/today", async (
+    IMediator mediator) =>
+{
+    try
+    {
+        var query = new GetTodayPlanQuery();
+        var result = await mediator.Send(query);
+        return Results.Ok(result);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Unauthorized();
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred: {ex.Message}");
+    }
+}).RequireAuthorization("Client"); // Requires Client role from JWT
 
 // --------------------
 // AUTH — DIETITIAN REGISTER

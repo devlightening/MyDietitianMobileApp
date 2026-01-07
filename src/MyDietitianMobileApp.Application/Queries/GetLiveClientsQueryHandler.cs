@@ -36,7 +36,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                 var dietPlan = await _context.DietPlans
                     .FirstOrDefaultAsync(p => p.ClientId == client.Id
                         && p.DietitianId == query.DietitianId
-                        && p.IsActive
+                        && p.Status == DietPlanStatus.Active
                         && today >= DateOnly.FromDateTime(p.StartDate)
                         && today <= DateOnly.FromDateTime(p.EndDate));
 
@@ -57,7 +57,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                     .FirstOrDefaultAsync();
 
                 // Get current meal (if any meal is in progress today)
-                var dietDay = await _context.DietDays
+                var dietDay = await _context.DietPlanDays
                     .FirstOrDefaultAsync(d => d.DietPlanId == dietPlan.Id && d.Date == today);
 
                 string? currentMeal = null;
@@ -65,8 +65,8 @@ namespace MyDietitianMobileApp.Application.Handlers
 
                 if (dietDay != null)
                 {
-                    var meals = await _context.Meals
-                        .Where(m => m.DietDayId == dietDay.Id)
+                    var meals = await _context.DietPlanMeals
+                        .Where(m => m.DietPlanDayId == dietDay.Id)
                         .OrderBy(m => m.Type)
                         .ToListAsync();
 

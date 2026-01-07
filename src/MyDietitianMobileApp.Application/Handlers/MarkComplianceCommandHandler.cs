@@ -28,14 +28,14 @@ namespace MyDietitianMobileApp.Application.Handlers
             if (mealItem == null)
                 throw new InvalidOperationException($"MealItem {command.MealItemId} not found.");
 
-            var meal = await _context.Meals
+            var meal = await _context.DietPlanMeals
                 .FirstOrDefaultAsync(m => m.Id == mealItem.MealId);
 
             if (meal == null)
                 throw new InvalidOperationException($"Meal for MealItem {command.MealItemId} not found.");
 
-            var dietDay = await _context.DietDays
-                .FirstOrDefaultAsync(d => d.Id == meal.DietDayId);
+            var dietDay = await _context.DietPlanDays
+                .FirstOrDefaultAsync(d => d.Id == meal.DietPlanDayId);
 
             if (dietDay == null)
                 throw new InvalidOperationException($"DietDay for Meal {meal.Id} not found.");

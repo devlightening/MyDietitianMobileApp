@@ -13,11 +13,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         
         // Compliance tracking entities
         public DbSet<DietPlan> DietPlans { get; set; }
-        public DbSet<DietDay> DietDays { get; set; }
-        public DbSet<Meal> Meals { get; set; }
+        public DbSet<DietPlanDay> DietPlanDays { get; set; }
+        public DbSet<DietPlanMeal> DietPlanMeals { get; set; }
         public DbSet<MealItem> MealItems { get; set; }
         public DbSet<MealItemCompliance> MealItemCompliance { get; set; }
         public DbSet<ComplianceScoreConfig> ComplianceScoreConfigs { get; set; }
+        public DbSet<MealCompliance> MealCompliances { get; set; } // Phase 5C
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -43,15 +44,15 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.DietitianId);
                 entity.HasIndex(e => e.ClientId);
-                entity.HasIndex(e => new { e.ClientId, e.IsActive });
+                entity.HasIndex(e => new { e.ClientId, e.Status });
                 
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
                 entity.Property(e => e.StartDate).IsRequired();
                 entity.Property(e => e.EndDate).IsRequired();
-                entity.Property(e => e.IsActive).IsRequired();
+                entity.Property(e => e.Status).IsRequired();
 
                 // Navigation property mapping (backing field)
-                entity.HasMany<DietDay>()
+                entity.HasMany<DietPlanDay>()
                     .WithOne()
                     .HasForeignKey(d => d.DietPlanId)
                     .OnDelete(DeleteBehavior.Cascade);
@@ -60,8 +61,8 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .SetPropertyAccessMode(PropertyAccessMode.Field);
             });
 
-            // DietDay
-            modelBuilder.Entity<DietDay>(entity =>
+            // DietPlanDay
+            modelBuilder.Entity<DietPlanDay>(entity =>
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.DietPlanId);
@@ -78,21 +79,21 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                         d => DateOnly.FromDateTime(d));
 
                 // Navigation property mapping
-                entity.HasMany<Meal>()
+                entity.HasMany<DietPlanMeal>()
                     .WithOne()
-                    .HasForeignKey(m => m.DietDayId)
+                    .HasForeignKey(m => m.DietPlanDayId)
                     .OnDelete(DeleteBehavior.Cascade);
                 
-                entity.Metadata.FindNavigation(nameof(DietDay.Meals))!
+                entity.Metadata.FindNavigation(nameof(DietPlanDay.Meals))!
                     .SetPropertyAccessMode(PropertyAccessMode.Field);
             });
 
-            // Meal
-            modelBuilder.Entity<Meal>(entity =>
+            // DietPlanMeal
+            modelBuilder.Entity<DietPlanMeal>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.DietDayId);
-                entity.HasIndex(e => new { e.DietDayId, e.Type });
+                entity.HasIndex(e => e.DietPlanDayId);
+                entity.HasIndex(e => new { e.DietPlanDayId, e.Type });
 
                 entity.Property(e => e.Type).IsRequired();
                 entity.Property(e => e.CustomName).HasMaxLength(200);
@@ -103,7 +104,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .HasForeignKey(mi => mi.MealId)
                     .OnDelete(DeleteBehavior.Cascade);
                 
-                entity.Metadata.FindNavigation(nameof(Meal.Items))!
+                entity.Metadata.FindNavigation(nameof(DietPlanMeal.Items))!
                     .SetPropertyAccessMode(PropertyAccessMode.Field);
             });
 
@@ -149,12 +150,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .HasForeignKey(e => e.DietPlanId)
                     .OnDelete(DeleteBehavior.Restrict);
                 
-                entity.HasOne<DietDay>()
+                entity.HasOne<DietPlanDay>()
                     .WithMany()
                     .HasForeignKey(e => e.DietDayId)
                     .OnDelete(DeleteBehavior.Restrict);
                 
-                entity.HasOne<Meal>()
+                entity.HasOne<DietPlanMeal>()
                     .WithMany()
                     .HasForeignKey(e => e.MealId)
                     .OnDelete(DeleteBehavior.Restrict);

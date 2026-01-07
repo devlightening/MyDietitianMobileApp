@@ -1,5 +1,13 @@
 namespace MyDietitianMobileApp.Domain.Entities
 {
+    public enum DietPlanStatus
+    {
+        Active = 1,
+        Completed = 2,
+        Expired = 3,
+        Draft = 4
+    }
+
     public class DietPlan
     {
         public Guid Id { get; private set; }
@@ -8,12 +16,12 @@ namespace MyDietitianMobileApp.Domain.Entities
         public string Name { get; private set; }
         public DateTime StartDate { get; private set; }
         public DateTime EndDate { get; private set; }
-        public bool IsActive { get; private set; }
-        public IReadOnlyCollection<DietDay> Days => _days.AsReadOnly();
+        public DietPlanStatus Status { get; private set; }
+        public IReadOnlyCollection<DietPlanDay> Days => _days.AsReadOnly();
 
-        private readonly List<DietDay> _days = new();
+        private readonly List<DietPlanDay> _days = new();
 
-        public DietPlan(Guid id, Guid dietitianId, Guid clientId, string name, DateTime startDate, DateTime endDate, bool isActive)
+        public DietPlan(Guid id, Guid dietitianId, Guid clientId, string name, DateTime startDate, DateTime endDate, DietPlanStatus status = DietPlanStatus.Draft)
         {
             if (endDate <= startDate)
                 throw new ArgumentException("End date must be after start date.");
@@ -24,10 +32,10 @@ namespace MyDietitianMobileApp.Domain.Entities
             Name = name;
             StartDate = startDate;
             EndDate = endDate;
-            IsActive = isActive;
+            Status = status;
         }
 
-        public void AddDay(DietDay day)
+        public void AddDay(DietPlanDay day)
         {
             if (day.DietPlanId != Id)
                 throw new InvalidOperationException("Day must belong to this diet plan.");
@@ -38,8 +46,9 @@ namespace MyDietitianMobileApp.Domain.Entities
             _days.Add(day);
         }
 
-        public void Activate() => IsActive = true;
-        public void Deactivate() => IsActive = false;
+        public void Activate() => Status = DietPlanStatus.Active;
+        public void Complete() => Status = DietPlanStatus.Completed;
+        public void Expire() => Status = DietPlanStatus.Expired;
 
         public override bool Equals(object obj)
         {

@@ -20,14 +20,14 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             DateOnly date)
         {
             // Get all meals for this day
-            var dietDay = await _context.DietDays
+            var dietDay = await _context.DietPlanDays
                 .FirstOrDefaultAsync(d => d.DietPlanId == dietPlanId && d.Date == date);
 
             if (dietDay == null)
                 return 0m;
 
-            var meals = await _context.Meals
-                .Where(m => m.DietDayId == dietDay.Id)
+            var meals = await _context.DietPlanMeals
+                .Where(m => m.DietPlanDayId == dietDay.Id)
                 .ToListAsync();
 
             if (!meals.Any())
@@ -58,13 +58,13 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                 return 0m;
 
             // Get meal and diet day
-            var meal = await _context.Meals
+            var meal = await _context.DietPlanMeals
                 .FirstOrDefaultAsync(m => m.Id == mealId);
 
             if (meal == null)
                 return 0m;
 
-            var dietDay = await _context.DietDays.FirstOrDefaultAsync(d => d.Id == meal.DietDayId);
+            var dietDay = await _context.DietPlanDays.FirstOrDefaultAsync(d => d.Id == meal.DietPlanDayId);
             if (dietDay == null)
                 return 0m;
 

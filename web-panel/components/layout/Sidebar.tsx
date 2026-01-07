@@ -3,14 +3,15 @@
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  ChefHat, 
-  Key, 
+import {
+  LayoutDashboard,
+  ChefHat,
+  Key,
   LogOut,
   Users,
   Plus,
-  Search
+  Search,
+  Calendar
 } from 'lucide-react';
 import { logout } from '@/lib/auth';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,7 @@ const menuItems = [
   { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
   { key: 'createRecipe', href: '/dashboard/recipes/create', icon: Plus },
   { key: 'recipeMatch', href: '/dashboard/recipe-match', icon: Search, badge: 'NEW' },
+  { key: 'dietPlans', href: '/dashboard/diet-plans', icon: Calendar },
   { key: 'clients', href: '/dashboard/clients', icon: Users },
   { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
 ];
@@ -65,9 +67,9 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
       <nav className="flex-1 flex flex-col gap-1 px-3 py-4 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || 
+          const isActive = pathname === item.href ||
             (item.href !== '/dashboard' && pathname?.startsWith(item.href));
-          
+
           return (
             <Link
               key={item.href}

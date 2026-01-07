@@ -32,7 +32,7 @@ namespace MyDietitianMobileApp.Application.Handlers
             var dietPlan = await _context.DietPlans
                 .FirstOrDefaultAsync(p => p.ClientId == query.ClientId 
                     && p.DietitianId == query.DietitianId 
-                    && p.IsActive
+                    && p.Status == DietPlanStatus.Active
                     && query.Date >= DateOnly.FromDateTime(p.StartDate)
                     && query.Date <= DateOnly.FromDateTime(p.EndDate));
 
@@ -49,7 +49,7 @@ namespace MyDietitianMobileApp.Application.Handlers
             }
 
             // Get diet day
-            var dietDay = await _context.DietDays
+            var dietDay = await _context.DietPlanDays
                 .FirstOrDefaultAsync(d => d.DietPlanId == dietPlan.Id && d.Date == query.Date);
 
             if (dietDay == null)
@@ -64,8 +64,8 @@ namespace MyDietitianMobileApp.Application.Handlers
             }
 
             // Get all meals for this day
-            var meals = await _context.Meals
-                .Where(m => m.DietDayId == dietDay.Id)
+            var meals = await _context.DietPlanMeals
+                .Where(m => m.DietPlanDayId == dietDay.Id)
                 .OrderBy(m => m.Type)
                 .ToListAsync();
 
@@ -122,7 +122,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                 {
                     MealId = meal.Id,
                     MealType = meal.Type,
-                    MealName = meal.CustomName ?? (meal.RecipeId != null ? "Recipe" : "Custom"),
+                    MealName = meal.CustomName ?? (meal.PlannedRecipeId != null ? "Recipe" : "Custom"),
                     CompliancePercentage = mealCompliance,
                     Items = itemDtos
                 });
