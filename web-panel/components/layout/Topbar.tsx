@@ -20,6 +20,7 @@ export function Topbar() {
     // Dietitian routes
     if (pathname === '/dashboard') return tCommon('dashboard');
     if (pathname === '/dashboard/recipes') return tCommon('recipes');
+    if (pathname === '/dashboard/recipe-match') return tCommon('recipeMatch');
     if (pathname === '/dashboard/clients') return tCommon('clients');
     if (pathname?.startsWith('/dashboard/clients/')) return tClients('title');
     if (pathname === '/dashboard/access-keys') return tCommon('accessKeys');

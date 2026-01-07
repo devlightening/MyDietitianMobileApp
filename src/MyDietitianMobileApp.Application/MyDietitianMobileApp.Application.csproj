@@ -5,6 +5,10 @@
     <ProjectReference Include="..\MyDietitianMobileApp.Infrastructure\MyDietitianMobileApp.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.2.0" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

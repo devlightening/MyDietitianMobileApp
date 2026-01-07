@@ -1,4 +1,7 @@
 using MyDietitianMobileApp.Domain.Entities;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyDietitianMobileApp.Domain.Repositories
 {
@@ -23,6 +26,7 @@ namespace MyDietitianMobileApp.Domain.Repositories
     public interface IRecipeRepository
     {
         IEnumerable<Recipe> ListByDietitianId(Guid dietitianId);
+        Task AddAsync(Recipe recipe, CancellationToken cancellationToken);
+        Task<List<Recipe>> GetAllWithIngredientsAsync(CancellationToken cancellationToken);
     }
 }
-

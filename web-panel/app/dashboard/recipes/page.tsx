@@ -17,6 +17,7 @@ interface RecipeIngredient {
   amount: string;
   unit: string;
   isMandatory: boolean;
+  isProhibited: boolean;
 }
 
 function RecipeIngredientsInput({ 
@@ -56,8 +57,15 @@ function RecipeIngredientsInput({
     onChange(updated);
   }
 
+  function handleProhibitedToggle(idx: number) {
+    const updated = value.map((ing, i) =>
+      i === idx ? { ...ing, isProhibited: !ing.isProhibited } : ing
+    );
+    onChange(updated);
+  }
+
   function addIngredient() {
-    onChange([...value, { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }]);
+    onChange([...value, { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }]);
   }
 
   function removeIngredient(idx: number) {
@@ -113,6 +121,14 @@ function RecipeIngredientsInput({
               >
                 {ing.isMandatory ? t('mandatory') : t('optional')}
               </Button>
+              <Button
+                type="button"
+                variant={ing.isProhibited ? 'danger' : 'secondary'}
+                onClick={() => handleProhibitedToggle(idx)}
+                className="whitespace-nowrap"
+              >
+                {ing.isProhibited ? t('prohibited') : t('allowed')}
+              </Button>
             </div>
           </div>
         ))}
@@ -160,7 +176,7 @@ export default function RecipesPage() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
-    { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }
+    { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }
   ])
   
   const mutation = useMutation({
@@ -169,7 +185,7 @@ export default function RecipesPage() {
       queryClient.invalidateQueries({ queryKey: ['recipes'] })
       setName("")
       setDescription("")
-      setIngredients([{ ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true }])
+      setIngredients([{ ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }])
     }
   })
 
@@ -192,12 +208,16 @@ export default function RecipesPage() {
       .filter(ing => !ing.isMandatory && ing.ingredientId)
       .map(ing => ing.ingredientId);
 
+    const prohibitedIngredientIds = ingredients
+      .filter(ing => ing.isProhibited && ing.ingredientId)
+      .map(ing => ing.ingredientId);
+
     mutation.mutate({
       name,
       description,
       mandatoryIngredientIds,
       optionalIngredientIds,
-      prohibitedIngredientIds: [] // TODO: Add UI for prohibited ingredients if needed
+      prohibitedIngredientIds
     });
   };
 

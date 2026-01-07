@@ -4,6 +4,8 @@ using MyDietitianMobileApp.Domain.Repositories;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyDietitianMobileApp.Infrastructure.Persistence
 {
@@ -19,6 +21,21 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
             return _context.Recipes
                 .Where(r => r.DietitianId == dietitianId)
                 .ToList();
+        }
+
+        public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken)
+        {
+            await _context.Recipes.AddAsync(recipe, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task<List<Recipe>> GetAllWithIngredientsAsync(CancellationToken cancellationToken)
+        {
+            return await _context.Recipes
+                .Include(r => r.MandatoryIngredients)
+                .Include(r => r.OptionalIngredients)
+                .Include(r => r.ProhibitedIngredients)
+                .ToListAsync(cancellationToken);
         }
     }
 }

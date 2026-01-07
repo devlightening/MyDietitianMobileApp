@@ -16,6 +16,31 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
+    "/dashboard/recipes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/recipes/page.js"
+    ],
+    "/dashboard/recipes/create/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/recipes/create/page.js"
+    ],
+    "/dashboard/clients/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/clients/page.js"
+    ],
+    "/dashboard/access-keys/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/access-keys/page.js"
+    ],
+    "/dashboard/recipe-match/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/recipe-match/page.js"
+    ],
     "/admin/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -40,21 +65,6 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/auth/layout.js"
-    ],
-    "/dashboard/recipes/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/recipes/page.js"
-    ],
-    "/dashboard/clients/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/clients/page.js"
-    ],
-    "/dashboard/access-keys/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/access-keys/page.js"
     ]
   }
 }

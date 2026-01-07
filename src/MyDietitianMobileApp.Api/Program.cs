@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Handlers;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
@@ -20,6 +21,8 @@ using Npgsql;
 using System.Text;
 using System.Threading.Tasks;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
+using MediatR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -117,12 +120,17 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 
 // --------------------
-// Handlers
+// MediatR (CQRS)
+// --------------------
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(CreateRecipeCommand).Assembly));
+
+// --------------------
+// Legacy Handlers (for non-MediatR commands/queries - to be migrated later)
 // --------------------
 builder.Services.AddScoped<ICreateAccessKeyHandler, CreateAccessKeyCommandHandler>();
 builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKeyForClientCommandHandler>();
 builder.Services.AddScoped<IListAccessKeysByDietitianHandler, ListAccessKeysByDietitianQueryHandler>();
-builder.Services.AddScoped<ICreateRecipeHandler, CreateRecipeCommandHandler>();
 builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
 builder.Services.AddScoped<ISearchIngredientsHandler, SearchIngredientsQueryHandler>();
 
@@ -415,12 +423,12 @@ app.MapPatch("/api/admin/ingredients/{id}/toggle-active", (
 
 // Recipes
 app.MapPost("/api/recipes", async (
-    CreateRecipeRequest request,
+    [FromBody] CreateRecipeRequest request,
     HttpContext httpContext,
-    AuthDbContext authDb,
-    ICreateRecipeHandler handler) =>
+    IMediator mediator,
+    AuthDbContext authDb) =>
 {
-    // Get dietitian ID from JWT
+    // Authorization check
     var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
     if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
         return Results.Unauthorized();
@@ -431,16 +439,20 @@ app.MapPost("/api/recipes", async (
 
     var dietitianId = user.LinkedDietitianId.Value;
 
+    var ingredients = request.Ingredients.Select(i => new CreateRecipeIngredientDto(
+        i.IngredientId,
+        i.IsMandatory,
+        i.IsProhibited
+    )).ToList();
+
     var command = new CreateRecipeCommand(
         dietitianId,
         request.Name,
         request.Description,
-        request.MandatoryIngredientIds,
-        request.OptionalIngredientIds,
-        request.ProhibitedIngredientIds
+        ingredients
     );
 
-    var result = handler.Handle(command);
+    var result = await mediator.Send(command);
     return Results.Ok(result);
 }).RequireAuthorization("Dietitian");
 
@@ -462,6 +474,22 @@ app.MapGet("/api/recipes", async (
     
     var query = new ListRecipesByActiveDietitianQuery(dietitianId);
     var result = handler.Handle(query);
+    return Results.Ok(result);
+}).RequireAuthorization("Dietitian");
+
+app.MapPost("/api/recipes/match", async (
+    [FromBody] List<Guid> clientIngredientIds,
+    HttpContext httpContext,
+    IMediator mediator) =>
+{
+    // Authorization check
+    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        return Results.Unauthorized();
+
+    var query = new MatchRecipesQuery(clientIngredientIds);
+    var result = await mediator.Send(query);
+
     return Results.Ok(result);
 }).RequireAuthorization("Dietitian");
 

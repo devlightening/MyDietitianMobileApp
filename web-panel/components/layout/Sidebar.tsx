@@ -20,6 +20,7 @@ const menuItems = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
   { key: 'createRecipe', href: '/dashboard/recipes/create', icon: Plus },
+  { key: 'recipeMatch', href: '/dashboard/recipe-match', icon: Search, badge: 'NEW' },
   { key: 'clients', href: '/dashboard/clients', icon: Users },
   { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
 ];
@@ -86,10 +87,17 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
                 isActive && 'text-primary'
               )} />
               {!collapsed && (
-                <span className={cn(
-                  'text-sm',
-                  isActive && 'font-medium'
-                )}>{t(item.key)}</span>
+                <div className="flex items-center gap-2 flex-1">
+                  <span className={cn(
+                    'text-sm',
+                    isActive && 'font-medium'
+                  )}>{t(item.key)}</span>
+                  {item.badge && (
+                    <span className="px-1.5 py-0.5 text-xs font-semibold bg-primary text-primary-foreground rounded">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
               )}
               {collapsed && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
