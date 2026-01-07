@@ -8,7 +8,9 @@ import {
   ChefHat, 
   Key, 
   LogOut,
-  Users
+  Users,
+  Plus,
+  Search
 } from 'lucide-react';
 import { logout } from '@/lib/auth';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,6 +19,7 @@ import { useTranslations } from 'next-intl';
 const menuItems = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
+  { key: 'createRecipe', href: '/dashboard/recipes/create', icon: Plus },
   { key: 'clients', href: '/dashboard/clients', icon: Users },
   { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
 ];
