@@ -1,3 +1,5 @@
+using MyDietitianMobileApp.Domain.Enums;
+
 namespace MyDietitianMobileApp.Domain.Entities
 {
     public class Client
@@ -8,21 +10,44 @@ namespace MyDietitianMobileApp.Domain.Entities
             return Id == other.Id;
         }
         public override int GetHashCode() => Id.GetHashCode();
+        
         public Guid Id { get; private set; }
         public string FullName { get; private set; }
+        public string Email { get; private set; }
+        public Gender Gender { get; private set; }
+        public DateOnly BirthDate { get; private set; }
+        public DateTime CreatedAt { get; private set; }
         public Guid? ActiveDietitianId { get; private set; }
+        public DateTime? PremiumActivatedAt { get; private set; }
         public DateTime? ProgramStartDate { get; private set; }
         public DateTime? ProgramEndDate { get; private set; }
         public bool IsActive { get; private set; }
+        
+        // Computed properties
+        public bool IsPremium => ActiveDietitianId.HasValue;
+        public int Age => CalculateAge(BirthDate);
+        
         public IReadOnlyCollection<AccessKey> AccessKeys => _accessKeys.AsReadOnly();
 
         private readonly List<AccessKey> _accessKeys = new();
 
-        public Client(Guid id, string fullName, bool isActive)
+        public Client(Guid id, string fullName, string email, Gender gender, DateOnly birthDate, bool isActive = true)
         {
             Id = id;
             FullName = fullName;
+            Email = email;
+            Gender = gender;
+            BirthDate = birthDate;
+            CreatedAt = DateTime.UtcNow;
             IsActive = isActive;
+        }
+        
+        private static int CalculateAge(DateOnly birthDate)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var age = today.Year - birthDate.Year;
+            if (birthDate > today.AddYears(-age)) age--;
+            return age;
         }
 
         public void SetActiveDietitian(Guid dietitianId, DateTime startDate, DateTime endDate)
@@ -34,6 +59,14 @@ namespace MyDietitianMobileApp.Domain.Entities
 
         public void Activate() => IsActive = true;
         public void Deactivate() => IsActive = false;
+
+        public void ActivatePremium(Guid dietitianId, DateTime? startDate = null, DateTime? endDate = null)
+        {
+            ActiveDietitianId = dietitianId;
+            PremiumActivatedAt = DateTime.UtcNow;
+            ProgramStartDate = startDate;
+            ProgramEndDate = endDate;
+        }
 
         public void AddAccessKey(AccessKey key)
         {

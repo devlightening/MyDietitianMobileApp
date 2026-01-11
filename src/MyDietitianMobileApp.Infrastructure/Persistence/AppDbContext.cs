@@ -18,7 +18,11 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<MealItem> MealItems { get; set; }
         public DbSet<MealItemCompliance> MealItemCompliance { get; set; }
         public DbSet<ComplianceScoreConfig> ComplianceScoreConfigs { get; set; }
-        public DbSet<MealCompliance> MealCompliances { get; set; } // Phase 5C
+        public DbSet<MealCompliance> MealCompliances { get; set; }
+
+        // FAZ 3: Permanent Binding & Measurements
+        public DbSet<DietitianClientLink> DietitianClientLinks { get; set; }
+        public DbSet<UserMeasurement> UserMeasurements { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 

@@ -1,7 +1,50 @@
-export interface LoginRequest {
-  premiumKey: string;
+export enum Gender {
+  Male = 'Male',
+  Female = 'Female',
+  Other = 'Other'
 }
 
-export interface LoginResponse {
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  gender: Gender;
+  birthDate: string; // YYYY-MM-DD format
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
   token: string;
+  role: string;
+  clientId?: string;
+  publicUserId: string;
+  isPremium: boolean;
+}
+
+export interface ActivatePremiumRequest {
+  accessKey: string;
+}
+
+export interface ActivatePremiumResponse {
+  message: string;
+  dietitianId: string;
+  dietitianName: string;
+  programStartDate?: string;
+  programEndDate?: string;
+}
+
+export interface UserProfile {
+  fullName?: string;
+  email?: string;
+  publicUserId: string;
+  clientId: string;
+  isPremium: boolean;
+  gender: Gender;
+  birthDate: string;
+  age: number;
+  activeDietitianId?: string;
 }

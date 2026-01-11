@@ -1,61 +1,62 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using MyDietitianMobileApp.Application.Commands;
+using Microsoft.OpenApi.Models;
+using MyDietitianMobileApp.Domain.Interfaces;
+using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Infrastructure.Repositories;
+using System.Security.Claims;
+using System.Text;
+using MediatR;
 using MyDietitianMobileApp.Application.Handlers;
-using MyDietitianMobileApp.Application.Queries;
-using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Services;
-using MyDietitianMobileApp.Infrastructure.Persistence;
-using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
-using MyDietitianMobileApp.Api.Utils;
-using MyDietitianMobileApp.Api.Models;
-using MyDietitianMobileApp.Api.Middleware;
-using Npgsql;
-using System.Text;
-using System.Threading.Tasks;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Mvc;
-using MediatR;
+using MyDietitianMobileApp.Application.Commands;
+using MyDietitianMobileApp.Application.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --------------------
-// Swagger
-// --------------------
+// ====================
+// NETWORK CONFIGURATION
+// ====================
+builder.WebHost.UseUrls("http://0.0.0.0:5000", "https://0.0.0.0:7154");
+
+// ====================
+// CONTROLLERS & API
+// ====================
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// ====================
+// SWAGGER
+// ====================
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new()
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "MyDietitianMobileApp.Api",
-        Version = "v1"
+        Title = "MyDietitian API",
+        Version = "v1",
+        Description = "Professional Dietitian-Client Management Platform"
     });
 
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
+        Description = "JWT Authorization header using the Bearer scheme (Example: 'Bearer 12345abcdef')",
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "JWT Authorization header using the Bearer scheme. \r\n\r\nExample: \"Bearer {token}\""
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer"
     });
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            new OpenApiSecurityScheme
             {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                Reference = new OpenApiReference
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
@@ -64,171 +65,109 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ====================
+// DATABASE CONTEXTS
+// ====================
+var appDbConnection = builder.Configuration.GetConnectionString("AppDb") 
+    ?? throw new InvalidOperationException("AppDb connection string missing");
+var authDbConnection = builder.Configuration.GetConnectionString("AuthDb") 
+    ?? throw new InvalidOperationException("AuthDb connection string missing");
 
-// --------------------
-// DbContexts (PostgreSQL)
-// --------------------
-var appDbConnection = builder.Configuration.GetConnectionString("AppDb");
-var authDbConnection = builder.Configuration.GetConnectionString("AuthDb");
-
-if (string.IsNullOrWhiteSpace(appDbConnection))
-{
-    throw new InvalidOperationException(
-        "Connection string 'AppDb' is missing. Check appsettings.Development.json");
-}
-
-if (string.IsNullOrWhiteSpace(authDbConnection))
-{
-    throw new InvalidOperationException(
-        "Connection string 'AuthDb' is missing. Check appsettings.Development.json");
-}
-
-// Log connection strings (without password) in Development
-// Note: Actual logging will happen after builder.Build() when logger is available
-
-// Configure Npgsql with connection timeout and retry strategy
 builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseNpgsql(appDbConnection, npgsqlOptions =>
-    {
-        // Connection timeout: 30 seconds
-        npgsqlOptions.CommandTimeout(30);
-    });
-    // Enable retry on failure (for transient errors)
-    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
-});
+    options.UseNpgsql(appDbConnection, npgsqlOptions => npgsqlOptions.CommandTimeout(30))
+        .EnableSensitiveDataLogging(builder.Environment.IsDevelopment()));
 
 builder.Services.AddDbContext<AuthDbContext>(options =>
-{
-    options.UseNpgsql(authDbConnection, npgsqlOptions =>
-    {
-        // Connection timeout: 30 seconds
-        npgsqlOptions.CommandTimeout(30);
-    });
-    // Enable retry on failure (for transient errors)
-    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
-});
+    options.UseNpgsql(authDbConnection, npgsqlOptions => npgsqlOptions.CommandTimeout(30))
+        .EnableSensitiveDataLogging(builder.Environment.IsDevelopment()));
 
+// ====================
+// MEDIATR (CQRS)
+// ====================
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(RegisterClientCommandHandler).Assembly));
+
+// ====================
+// DOMAIN SERVICES
+// ====================
 builder.Services.AddScoped<PasswordHasherService>();
-
-// --------------------
-// Repositories
-// --------------------
-builder.Services.AddScoped<IDietitianRepository, DietitianRepository>();
-builder.Services.AddScoped<IClientRepository, ClientRepository>();
-builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
-builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
-
-// --------------------
-// HTTP Context (for accessing JWT claims in handlers)
-// --------------------
-builder.Services.AddHttpContextAccessor();
-
-// --------------------
-// MediatR (CQRS)
-// --------------------
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(CreateRecipeCommand).Assembly));
-
-// --------------------
-// Legacy Handlers (for non-MediatR commands/queries - to be migrated later)
-// --------------------
-builder.Services.AddScoped<ICreateAccessKeyHandler, CreateAccessKeyCommandHandler>();
-builder.Services.AddScoped<IActivateAccessKeyForClientHandler, ActivateAccessKeyForClientCommandHandler>();
-builder.Services.AddScoped<IListAccessKeysByDietitianHandler, ListAccessKeysByDietitianQueryHandler>();
-builder.Services.AddScoped<IListRecipesByActiveDietitianHandler, ListRecipesByActiveDietitianQueryHandler>();
-builder.Services.AddScoped<ISearchIngredientsHandler, SearchIngredientsQueryHandler>();
-
-// Admin Ingredient Management
-builder.Services.AddScoped<IListAllIngredientsHandler, ListAllIngredientsQueryHandler>();
-builder.Services.AddScoped<ICreateIngredientHandler, CreateIngredientCommandHandler>();
-builder.Services.AddScoped<IUpdateIngredientHandler, UpdateIngredientCommandHandler>();
-builder.Services.AddScoped<IToggleIngredientActiveHandler, ToggleIngredientActiveCommandHandler>();
-
-// Compliance handlers
-builder.Services.AddScoped<IMarkComplianceHandler, MarkComplianceCommandHandler>();
-builder.Services.AddScoped<IGetDailyComplianceHandler, GetDailyComplianceQueryHandler>();
-builder.Services.AddScoped<IGetLiveClientsHandler, GetLiveClientsQueryHandler>();
-
-// Compliance services
+builder.Services.AddScoped<IHealthCalculationService, HealthCalculationService>();
 builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
-
-// Diet Plan services
 builder.Services.AddScoped<IAlternativeMealDecisionService, AlternativeMealDecisionService>();
 
-// --------------------
-// CORS (for local Next.js dev)
-// --------------------
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("Frontend", policy =>
-    {
-        policy.WithOrigins(
-            "http://localhost:3000",
-            "http://127.0.0.1:3000"
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials();
-    });
-});
+// ====================
+// REPOSITORIES
+// ====================
+builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
+builder.Services.AddScoped<IDietitianRepository, DietitianRepository>();
+builder.Services.AddScoped<IClientRepository, ClientRepository>();
 
-// --------------------
-// JWT CONFIG (🔥 KRİTİK DÜZELTME)
-// --------------------
-var jwtSection = builder.Configuration.GetSection("Jwt");
+// ====================
+// ASP.NET CORE SERVICES
+// ====================
+builder.Services.AddHttpContextAccessor();
 
-var jwtSecret = jwtSection["Secret"];
-var jwtIssuer = jwtSection["Issuer"];
-var jwtAudience = jwtSection["Audience"];
-var expiresMinutes = int.Parse(jwtSection["ExpiresMinutes"] ?? "60");
-
-if (string.IsNullOrWhiteSpace(jwtSecret))
-{
-    throw new Exception("JWT Secret is missing. Check appsettings.Development.json");
-}
+// ====================
+// JWT AUTHENTICATION
+// ====================
+var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("JWT Secret missing");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MyDietitian.Api";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MyDietitian.Mobile";
 
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
+    options.SaveToken = true;
+    options.RequireHttpsMetadata = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtSecret)
-        )
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        RoleClaimType = "role"
     };
 
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
-            if (context.Request.Cookies.TryGetValue("access_token", out var token))
-            {
-                context.Token = token;
-            }
+            context.Token = context.Request.Cookies["access_token"];
             return Task.CompletedTask;
         }
     };
 });
 
-// --------------------
-// Authorization Policies
-// --------------------
+//====================
+// AUTHORIZATION POLICIES
+// ====================
+builder.Services.AddAuthorization();
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("Dietitian", policy => policy.RequireRole("Dietitian"));
-    options.AddPolicy("Client", policy => policy.RequireRole("Client"));
+    options.AddPolicy("RequireClientRole", policy => policy.RequireRole("Client"));
+    options.AddPolicy("RequireDietitianRole", policy => policy.RequireRole("Dietitian"));
+    
+    options.AddPolicy("Client", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim("role", "Client");
+    });
+    
+    options.AddPolicy("Dietitian", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim("role", "Dietitian");
+    });
+    
     options.AddPolicy("Admin", policy =>
     {
         policy.RequireAuthenticatedUser();
@@ -236,732 +175,65 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
+// ====================
+// CORS
+// ====================
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:3000")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
-// --------------------
-// Database Connectivity Check (Startup)
-// --------------------
+// ====================
+// DATABASE VERIFICATION
+// ====================
 if (app.Environment.IsDevelopment())
 {
-    using (var scope = app.Services.CreateScope())
+    using var scope = app.Services.CreateScope();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
     {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
-        // Log connection strings (without password) for debugging
-        var safeAppDbConnection = appDbConnection.Contains("Password=", StringComparison.Ordinal)
-            ? appDbConnection[..appDbConnection.IndexOf("Password=", StringComparison.Ordinal)] + "Password=***"
-            : appDbConnection;
-        var safeAuthDbConnection = authDbConnection.Contains("Password=", StringComparison.Ordinal)
-            ? authDbConnection[..authDbConnection.IndexOf("Password=", StringComparison.Ordinal)] + "Password=***"
-            : authDbConnection;
-        logger.LogInformation("🔌 PostgreSQL AppDb Connection: {ConnectionString}", safeAppDbConnection);
-        logger.LogInformation("🔌 PostgreSQL AuthDb Connection: {ConnectionString}", safeAuthDbConnection);
-        
-        try
-        {
-            // Test AppDbContext connection
-            var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var canConnect = await appDb.Database.CanConnectAsync();
-            if (!canConnect)
-            {
-                logger.LogError("❌ Failed to connect to PostgreSQL database (AppDbContext). " +
-                    "Check connection string and ensure PostgreSQL is running on port 5432.");
-                throw new InvalidOperationException( 
-                    "Database connection failed. Ensure PostgreSQL is running and connection string is correct.");
-            }
-            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AppDbContext)");
+        var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await appDb.Database.CanConnectAsync();
+        logger.LogInformation("✓ Successfully connected to PostgreSQL database (AppDbContext)");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "✗ Failed to connect to AppDbContext");
+    }
 
-            // Test AuthDbContext connection
-            var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            canConnect = await authDb.Database.CanConnectAsync();
-            if (!canConnect)
-            {
-                logger.LogError("❌ Failed to connect to PostgreSQL database (AuthDbContext). " +
-                    "Check connection string and ensure PostgreSQL is running on port 5432.");
-                throw new InvalidOperationException(
-                    "Database connection failed. Ensure PostgreSQL is running and connection string is correct.");
-            }
-            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AuthDbContext)");
-        }
-        catch (NpgsqlException ex)
-        {
-            logger.LogError(ex, "❌ PostgreSQL connection error: {Message}", ex.Message);
-            logger.LogError("💡 Troubleshooting:");
-            logger.LogError("   1. Ensure PostgreSQL is running on localhost:5432");
-            logger.LogError("   2. Check connection string in appsettings.Development.json");
-            logger.LogError("   3. Verify database 'mydietitian_dev' exists");
-            logger.LogError("   4. If using Docker, change port to 5433 in connection string");
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "❌ Unexpected error during database connectivity check");
-            throw;
-        }
+    try
+    {
+        var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        await authDb.Database.CanConnectAsync();
+        logger.LogInformation("✓ Successfully connected to PostgreSQL database (AuthDbContext)");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "✗ Failed to connect to AuthDbContext");
     }
 }
 
-// --------------------
-// Middleware
-// --------------------
+// ====================
+// MIDDLEWARE PIPELINE
+// ====================
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Only redirect to HTTPS in non-development
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-
-app.UseCors("Frontend");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Global Exception Middleware (must be after UseAuthorization but before endpoints)
-app.UseMiddleware<GlobalExceptionMiddleware>();
-
-// --------------------
-// API ENDPOINTS
-// --------------------
-
-// Access Keys
-app.MapGet("/api/access-keys", async (
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IListAccessKeysByDietitianHandler handler) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-    
-    var query = new ListAccessKeysByDietitianQuery(dietitianId);
-    var result = handler.Handle(query);
-    return Results.Ok(result);
-}).RequireAuthorization("Dietitian");
-
-app.MapPost("/api/access-keys", (
-    CreateAccessKeyCommand command,
-    ICreateAccessKeyHandler handler) =>
-{
-    var result = handler.Handle(command);
-    return Results.Ok(result);
-}).RequireAuthorization("Dietitian");
-
-app.MapPost("/api/access-keys/{id}/activate", (
-    Guid id,
-    ActivateAccessKeyForClientCommand command,
-    IActivateAccessKeyForClientHandler handler) =>
-{
-    var cmd = new ActivateAccessKeyForClientCommand(command.ClientId, id);
-    var result = handler.Handle(cmd);
-    return Results.Ok(result);
-}).RequireAuthorization("Client");
-
-// Ingredients
-app.MapGet("/api/ingredients/search", (
-    string q,
-    ISearchIngredientsHandler handler) =>
-{
-    if (string.IsNullOrWhiteSpace(q))
-        return Results.Ok(new { ingredients = Array.Empty<object>() });
-
-    var query = new SearchIngredientsQuery(q.Trim(), maxResults: 20);
-    var result = handler.Handle(query);
-    return Results.Ok(new { ingredients = result.Ingredients });
-});
-
-// Admin Ingredient Management
-app.MapGet("/api/admin/ingredients", (
-    IListAllIngredientsHandler handler) =>
-{
-    var query = new ListAllIngredientsQuery();
-    var result = handler.Handle(query);
-    return Results.Ok(new { ingredients = result.Ingredients });
-}).RequireAuthorization("Admin");
-
-app.MapPost("/api/admin/ingredients", (
-    CreateIngredientRequest request,
-    ICreateIngredientHandler handler) =>
-{
-    var command = new CreateIngredientCommand(
-        request.CanonicalName,
-        request.Aliases,
-        request.IsActive
-    );
-
-    var result = handler.Handle(command);
-    return Results.Ok(new { ingredientId = result.IngredientId });
-}).RequireAuthorization("Admin");
-
-app.MapPut("/api/admin/ingredients/{id}", (
-    Guid id,
-    UpdateIngredientRequest request,
-    IUpdateIngredientHandler handler) =>
-{
-    var command = new UpdateIngredientCommand(
-        id,
-        request.CanonicalName,
-        request.Aliases,
-        request.IsActive
-    );
-
-    var result = handler.Handle(command);
-    return Results.Ok(new { success = result.Success });
-}).RequireAuthorization("Admin");
-
-app.MapPatch("/api/admin/ingredients/{id}/toggle-active", (
-    Guid id,
-    ToggleIngredientActiveRequest request,
-    IToggleIngredientActiveHandler handler) =>
-{
-    var command = new ToggleIngredientActiveCommand(id, request.IsActive);
-    var result = handler.Handle(command);
-    return Results.Ok(new { success = result.Success });
-}).RequireAuthorization("Admin");
-
-// Recipes
-app.MapPost("/api/recipes", async (
-    [FromBody] CreateRecipeRequest request,
-    HttpContext httpContext,
-    IMediator mediator,
-    AuthDbContext authDb) =>
-{
-    // Authorization check
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    var ingredients = request.Ingredients.Select(i => new CreateRecipeIngredientDto(
-        i.IngredientId,
-        i.IsMandatory,
-        i.IsProhibited
-    )).ToList();
-
-    var command = new CreateRecipeCommand(
-        dietitianId,
-        request.Name,
-        request.Description,
-        ingredients
-    );
-
-    var result = await mediator.Send(command);
-    return Results.Ok(result);
-}).RequireAuthorization("Dietitian");
-
-app.MapGet("/api/recipes", async (
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IListRecipesByActiveDietitianHandler handler) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-    
-    var query = new ListRecipesByActiveDietitianQuery(dietitianId);
-    var result = handler.Handle(query);
-    return Results.Ok(result);
-}).RequireAuthorization("Dietitian");
-
-app.MapPost("/api/recipes/match", async (
-    [FromBody] List<Guid> clientIngredientIds,
-    HttpContext httpContext,
-    IMediator mediator) =>
-{
-    // Authorization check
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var query = new MatchRecipesQuery(clientIngredientIds);
-    var result = await mediator.Send(query);
-
-    return Results.Ok(result);
-}).RequireAuthorization("Dietitian");
-
-// --------------------
-// COMPLIANCE ENDPOINTS
-// --------------------
-
-// POST /api/compliance/mark - Client marks a meal item
-app.MapPost("/api/compliance/mark", async (
-    MarkComplianceRequest request,
-    HttpContext httpContext,
-    AppDbContext appDb,
-    AuthDbContext authDb,
-    IMarkComplianceHandler handler) =>
-{
-    // Get client ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Client");
-    if (user == null || !user.LinkedClientId.HasValue)
-        return Results.Unauthorized();
-
-    var clientId = user.LinkedClientId.Value;
-
-    // Parse status
-    if (!Enum.TryParse<ComplianceStatus>(request.Status, ignoreCase: true, out var status))
-        return Results.BadRequest("Invalid status. Must be: Done, Skipped, or Alternative");
-
-    // Validate Alternative status
-    if (status == ComplianceStatus.Alternative && !request.AlternativeIngredientId.HasValue)
-        return Results.BadRequest("AlternativeIngredientId is required when status is Alternative");
-
-    try
-    {
-        var command = new MarkComplianceCommand(
-            clientId,
-            request.MealItemId,
-            status,
-            request.AlternativeIngredientId,
-            request.ClientTimezoneOffsetMinutes
-        );
-
-        var result = await handler.HandleAsync(command);
-        return Results.Ok(new MarkComplianceResponse
-        {
-            Success = result.Success,
-            DailyCompliancePercentage = result.DailyCompliancePercentage,
-            ComplianceId = result.ComplianceId
-        });
-    }
-    catch (UnauthorizedAccessException ex)
-    {
-        return Results.Unauthorized();
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(ex.Message);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Client");
-
-// GET /api/compliance/daily - Dietitian views client's daily compliance
-app.MapGet("/api/compliance/daily", async (
-    Guid clientId,
-    DateOnly? date,
-    HttpContext httpContext,
-    AppDbContext appDb,
-    AuthDbContext authDb,
-    IGetDailyComplianceHandler handler) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    // Use today if date not provided
-    var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
-
-    try
-    {
-        var query = new GetDailyComplianceQuery(dietitianId, clientId, targetDate);
-        var result = await handler.HandleAsync(query);
-        return Results.Ok(result);
-    }
-    catch (UnauthorizedAccessException)
-    {
-        return Results.Unauthorized();
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Dietitian");
-
-// GET /api/dietitian/live-clients - Dashboard live view
-app.MapGet("/api/dietitian/live-clients", async (
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IGetLiveClientsHandler handler) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    try
-    {
-        var query = new GetLiveClientsQuery(dietitianId);
-        var result = await handler.HandleAsync(query);
-        return Results.Ok(result);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Dietitian");
-
-// --------------------
-// DIET PLAN ENDPOINTS
-// --------------------
-
-// POST /api/diet-plans - Create a new diet plan
-app.MapPost("/api/diet-plans", async (
-    [FromBody] CreateDietPlanCommand command,
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IMediator mediator) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    // Override dietitian ID from token
-    var createCommand = new CreateDietPlanCommand(
-        dietitianId,
-        command.ClientId,
-        command.Name,
-        command.StartDate,
-        command.EndDate,
-        command.Days);
-
-    try
-    {
-        var result = await mediator.Send(createCommand);
-        return result.Success 
-            ? Results.Ok(result) 
-            : Results.BadRequest(result.ErrorMessage);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Dietitian");
-
-// GET /api/diet-plans/{clientId} - Get diet plan for a client
-app.MapGet("/api/diet-plans/{clientId}", async (
-    Guid clientId,
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IMediator mediator) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    try
-    {
-        var query = new GetDietPlanByClientQuery(dietitianId, clientId);
-        var result = await mediator.Send(query);
-        return result != null 
-            ? Results.Ok(result) 
-            : Results.NotFound("No active diet plan found for this client.");
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Dietitian");
-
-// POST /api/diet-plans/decide-alternative - Get alternative recommendation
-app.MapPost("/api/diet-plans/decide-alternative", async (
-    [FromBody] DecideAlternativeMealQuery query,
-    HttpContext httpContext,
-    AuthDbContext authDb,
-    IMediator mediator) =>
-{
-    // Get dietitian ID from JWT
-    var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        return Results.Unauthorized();
-
-    var user = await authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
-    if (user == null || !user.LinkedDietitianId.HasValue)
-        return Results.Unauthorized();
-
-    var dietitianId = user.LinkedDietitianId.Value;
-
-    // Override dietitian ID from token
-    var decisionQuery = new DecideAlternativeMealQuery(
-        dietitianId,
-        query.PlannedRecipeId,
-        query.MealType,
-        query.ClientAvailableIngredients);
-
-    try
-    {
-        var result = await mediator.Send(decisionQuery);
-        return Results.Ok(result);
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Dietitian");
-
-// GET /api/diet-plans/today - Get today's plan for mobile client
-app.MapGet("/api/diet-plans/today", async (
-    IMediator mediator) =>
-{
-    try
-    {
-        var query = new GetTodayPlanQuery();
-        var result = await mediator.Send(query);
-        return Results.Ok(result);
-    }
-    catch (UnauthorizedAccessException ex)
-    {
-        return Results.Unauthorized();
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"An error occurred: {ex.Message}");
-    }
-}).RequireAuthorization("Client"); // Requires Client role from JWT
-
-// --------------------
-// AUTH — DIETITIAN REGISTER
-// --------------------
-app.MapPost("/api/auth/dietitian/register", async (
-    MyDietitianMobileApp.Api.Models.RegisterDietitianRequest request,
-    AuthDbContext authDb,
-    AppDbContext appDb,
-    PasswordHasherService hasher) =>
-{
-    if (await authDb.UserAccounts.AnyAsync(u => u.Email == request.Email))
-        return Results.BadRequest("Email already registered.");
-
-    var dietitian = new Dietitian(Guid.NewGuid(), request.FullName, request.ClinicName, true);
-    await appDb.Dietitians.AddAsync(dietitian);
-
-    var user = new UserAccount
-    {
-        Id = Guid.NewGuid(),
-        Email = request.Email,
-        PasswordHash = hasher.HashPassword(null, request.Password),
-        Role = "Dietitian",
-        LinkedDietitianId = dietitian.Id
-    };
-
-    await authDb.UserAccounts.AddAsync(user);
-
-    await appDb.SaveChangesAsync();
-    await authDb.SaveChangesAsync();
-
-    return Results.Ok();
-});
-
-// --------------------
-// AUTH — DIETITIAN LOGIN
-// --------------------
-app.MapPost("/api/auth/dietitian/login", async (
-    MyDietitianMobileApp.Api.Models.LoginDietitianRequest request,
-    AuthDbContext authDb,
-    PasswordHasherService hasher,
-    HttpResponse response) =>
-{
-    var user = await authDb.UserAccounts
-        .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Dietitian");
-
-    if (user == null || !hasher.VerifyPassword(user, request.Password))
-        return Results.Unauthorized();
-
-    var token = JwtTokenGenerator.GenerateToken(
-        user.Id.ToString(),
-        "Dietitian",
-        jwtSecret,
-        jwtIssuer,
-        jwtAudience,
-        expiresMinutes
-    );
-
-    var cookieOptions = new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = !app.Environment.IsDevelopment(),
-        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
-        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
-        Path = "/"
-    };
-
-    response.Cookies.Append("access_token", token, cookieOptions);
-    return Results.Ok(new { ok = true });
-});
-
-// --------------------
-// AUTH — CLIENT ACCESS KEY LOGIN
-// --------------------
-app.MapPost("/api/auth/client/access-key", async (
-    MyDietitianMobileApp.Api.Models.LoginClientWithAccessKeyRequest request,
-    AppDbContext appDb,
-    AuthDbContext authDb,
-    HttpResponse response) =>
-{
-    var accessKey = await appDb.AccessKeys
-        .FirstOrDefaultAsync(a => a.Key == request.AccessKey && a.IsActive);
-
-    if (accessKey == null ||
-        DateTime.UtcNow < accessKey.StartDate ||
-        DateTime.UtcNow > accessKey.EndDate)
-        return Results.Unauthorized();
-
-    var client = await appDb.Clients
-        .FirstOrDefaultAsync(c => c.Id == accessKey.ClientId && c.IsActive);
-
-    if (client == null)
-        return Results.Unauthorized();
-
-    client.SetActiveDietitian(
-        accessKey.DietitianId,
-        accessKey.StartDate,
-        accessKey.EndDate);
-
-    await appDb.SaveChangesAsync();
-
-    var user = await authDb.UserAccounts
-        .FirstOrDefaultAsync(u => u.LinkedClientId == client.Id && u.Role == "Client");
-
-    if (user == null)
-    {
-        user = new UserAccount
-        {
-            Id = Guid.NewGuid(),
-            Role = "Client",
-            LinkedClientId = client.Id,
-            ActiveDietitianContextId = accessKey.DietitianId
-        };
-        await authDb.UserAccounts.AddAsync(user);
-    }
-    else
-    {
-        user.ActiveDietitianContextId = accessKey.DietitianId;
-    }
-
-    await authDb.SaveChangesAsync();
-
-    var token = JwtTokenGenerator.GenerateToken(
-        user.Id.ToString(),
-        "Client",
-        jwtSecret,
-        jwtIssuer,
-        jwtAudience,
-        expiresMinutes,
-        new Dictionary<string, string>
-        {
-            { "ActiveDietitianId", accessKey.DietitianId.ToString() }
-        }
-    );
-
-    var cookieOptions = new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = !app.Environment.IsDevelopment(),
-        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
-        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
-        Path = "/"
-    };
-
-    response.Cookies.Append("access_token", token, cookieOptions);
-    return Results.Ok(new { ok = true });
-});
-
-// --------------------
-// AUTH — ADMIN LOGIN
-// --------------------
-app.MapPost("/api/auth/admin/login", async (
-    AdminLoginRequest request,
-    AuthDbContext authDb,
-    PasswordHasherService hasher,
-    HttpResponse response) =>
-{
-    var user = await authDb.UserAccounts
-        .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Admin");
-
-    if (user == null || !hasher.VerifyPassword(user, request.Password))
-        return Results.Unauthorized();
-
-    var token = JwtTokenGenerator.GenerateToken(
-        user.Id.ToString(),
-        "Admin",
-        jwtSecret,
-        jwtIssuer,
-        jwtAudience,
-        expiresMinutes
-    );
-
-    var cookieOptions = new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = !app.Environment.IsDevelopment(),
-        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
-        Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
-        Path = "/"
-    };
-
-    response.Cookies.Append("access_token", token, cookieOptions);
-    return Results.Ok(new AdminLoginResponse { Token = token });
-}).AllowAnonymous();
-
-// --------------------
-// AUTH — LOGOUT
-// --------------------
-app.MapPost("/api/auth/logout", (HttpResponse response) =>
-{
-    var cookieOptions = new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = !app.Environment.IsDevelopment(),
-        SameSite = app.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Lax,
-        Expires = DateTime.UtcNow.AddDays(-1),
-        Path = "/"
-    };
-    response.Cookies.Delete("access_token", cookieOptions);
-    return Results.Ok(new { ok = true });
-});
+app.MapControllers();
 
 app.Run();

@@ -1,8 +1,8 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-// IP adresin - telefondan test için
-const API_BASE_URL = 'http://172.20.10.9:8081';
+// HTTP for local development - iOS allows this for local networks
+const API_BASE_URL = 'http://172.20.10.4:5000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

@@ -1,100 +1,150 @@
 "use client"
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useState } from 'react'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Key, Plus, AlertCircle, Check } from 'lucide-react'
+import { Key, Plus, Check } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 
 function fetchAccessKeys() {
   return api.get('/api/access-keys').then(res => res.data.accessKeys)
 }
 
-function createAccessKey(data: { clientId: string; startDate: string; endDate: string }) {
-  return api.post('/api/access-keys', data)
-}
-
 export default function AccessKeysPage() {
   const t = useTranslations('accessKeys');
-  const tCommon = useTranslations('common');
-  const queryClient = useQueryClient()
-  const { data: accessKeys, isLoading } = useQuery({
+  const router = useRouter();
+  const { data: accessKeys, isLoading, refetch } = useQuery({
     queryKey: ['accessKeys'],
     queryFn: fetchAccessKeys
   })
-  const [clientId, setClientId] = useState("")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-  const mutation = useMutation({
-    mutationFn: createAccessKey,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accessKeys'] })
-      setClientId("")
-      setStartDate("")
-      setEndDate("")
+
+  const [formData, setFormData] = useState({
+    clientPublicUserId: '',
+    startDate: '',
+    endDate: ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handlePublicUserIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+
+    if (!value.startsWith('MD-') && value.length > 0) {
+      value = 'MD-' + value.replace(/^MD-?/, '');
     }
-  })
+
+    if (value.length > 7 && value[7] !== '-') {
+      value = value.slice(0, 7) + '-' + value.slice(7);
+    }
+    if (value.length > 12 && value[12] !== '-') {
+      value = value.slice(0, 12) + '-' + value.slice(12);
+    }
+
+    value = value.slice(0, 17);
+    setFormData(prev => ({ ...prev, clientPublicUserId: value }));
+  };
+
+  const isValidPublicUserId = (id: string) => {
+    return /^MD-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{2}$/.test(id);
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!isValidPublicUserId(formData.clientPublicUserId)) {
+      alert('Geçersiz Kullanıcı ID formatı. Format: MD-XXXX-XXXX-XX');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/dietitian/access-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          clientId: formData.clientPublicUserId,
+          startDate: formData.startDate,
+          endDate: formData.endDate
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Key oluşturulamadı');
+      }
+
+      alert('Access key başarıyla oluşturuldu!');
+      setFormData({ clientPublicUserId: '', startDate: '', endDate: '' });
+      refetch();
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-semibold text-foreground">{t('title')}</h2>
-        <p className="text-muted-foreground mt-1">
-          {t('subtitle')}
-        </p>
+        <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
       </div>
 
-      {/* Generate Key Form */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-foreground mb-6">{t('generateKey')}</h3>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={e => {
-            e.preventDefault();
-            mutation.mutate({ clientId, startDate, endDate });
-          }}
-        >
-          <Input
-            label={t('clientId')}
-            placeholder={t('clientIdPlaceholder')}
-            value={clientId}
-            onChange={e => setClientId(e.target.value)}
-            required
-          />
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Danışan ID (MD-XXXX-XXXX-XX)
+            </label>
+            <input
+              type="text"
+              value={formData.clientPublicUserId}
+              onChange={handlePublicUserIdChange}
+              placeholder="MD-"
+              className="w-full p-2 border rounded font-mono"
+              required
+            />
+            {formData.clientPublicUserId && !isValidPublicUserId(formData.clientPublicUserId) && (
+              <p className="text-sm text-red-500 mt-1">
+                Geçersiz format. Örnek: MD-A1B2-C3D4-E5
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label={t('startDate')}
               type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
+              value={formData.startDate}
+              onChange={e => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
               required
             />
             <Input
               label={t('endDate')}
               type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
+              value={formData.endDate}
+              onChange={e => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
               required
             />
           </div>
+
           <Button
             type="submit"
             variant="primary"
-            loading={mutation.isLoading}
-            disabled={mutation.isLoading}
+            disabled={loading}
             className="w-full sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
-            {mutation.isLoading ? t('creating') : t('create')}
+            {loading ? 'Oluşturuluyor...' : t('create')}
           </Button>
         </form>
       </Card>
 
-      {/* Access Keys List */}
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -153,4 +203,3 @@ export default function AccessKeysPage() {
     </div>
   )
 }
-

@@ -35,6 +35,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations.AuthDb
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("FullName")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("LinkedClientId")
                         .HasColumnType("uuid");
 
@@ -42,6 +45,10 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations.AuthDb
                         .HasColumnType("uuid");
 
                     b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublicUserId")
                         .IsRequired()
                         .HasColumnType("text");
 

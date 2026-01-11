@@ -28,6 +28,12 @@ namespace MyDietitianMobileApp.Domain.Entities
 
         public void Deactivate() => IsActive = false;
 
+        public void MarkAsActivated()
+        {
+            // Mark key as used/activated
+            Deactivate();
+        }
+
         public override bool Equals(object obj)
         {
             if (obj is not AccessKey other) return false;
