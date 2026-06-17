@@ -113,8 +113,15 @@ api.interceptors.response.use(
     // Handle authentication/authorization errors
     if (status === 401 || status === 403) {
       // Only redirect if we're not already on auth pages
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
-        window.location.href = '/auth/login';
+      if (typeof window !== 'undefined') {
+        const pathname = window.location.pathname;
+        const isAuthPage = pathname.startsWith('/auth');
+        const isAdminLoginPage = pathname === '/admin/login';
+        const loginPath = pathname.startsWith('/admin') ? '/admin/login' : '/auth/login';
+
+        if (!isAuthPage && !isAdminLoginPage) {
+          window.location.href = loginPath;
+        }
       }
     }
 

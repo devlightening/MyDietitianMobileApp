@@ -32,6 +32,8 @@ const nextConfig = {
       { source: '/login', destination: '/auth/login', permanent: false },
       { source: '/register', destination: '/auth/register', permanent: false },
       { source: '/access-key', destination: '/auth/client-access', permanent: false },
+      { source: '/owner', destination: '/admin/messages', permanent: false },
+      { source: '/owner/giris', destination: '/admin/login', permanent: false },
     ]
   },
 }

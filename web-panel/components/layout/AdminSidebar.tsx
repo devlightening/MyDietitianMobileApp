@@ -1,9 +1,11 @@
 "use client";
 
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
+  Inbox,
   Package,
   LogOut
 } from 'lucide-react';
@@ -12,7 +14,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 
 const adminMenuItems = [
-  { key: 'ingredients', href: '/admin/ingredients', icon: Package },
+  { key: 'messages', href: '/admin/messages', icon: Inbox, label: 'Demo Talepleri' },
+  { key: 'ingredients', href: '/admin/ingredients', icon: Package, label: 'Malzeme Yönetimi' },
 ];
 
 export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
@@ -20,8 +23,6 @@ export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations('common');
-  const tAdmin = useTranslations('admin.ingredients');
-
   const handleLogout = async () => {
     queryClient.clear();
     await logout();
@@ -40,15 +41,32 @@ export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
         collapsed && 'justify-center px-0'
       )}>
         {collapsed ? (
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">AD</span>
+          <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-border">
+            <Image
+              src="/brand/dytopia-logo.png"
+              alt="Dytopia"
+              fill
+              sizes="36px"
+              className="object-contain p-1"
+              priority
+            />
           </div>
         ) : (
           <Link href="/admin/ingredients" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center group-hover:bg-primary/90 transition-colors">
-              <span className="text-primary-foreground font-bold text-sm">AD</span>
+            <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-border transition group-hover:ring-primary/40">
+              <Image
+                src="/brand/dytopia-logo.png"
+                alt="Dytopia"
+                fill
+                sizes="40px"
+                className="object-contain p-1"
+                priority
+              />
             </div>
-            <span className="font-semibold text-lg text-foreground">Admin Panel</span>
+            <div className="min-w-0">
+              <span className="block text-lg font-bold leading-tight text-foreground">Dytopia</span>
+              <span className="block text-xs font-semibold text-muted-foreground">Admin Panel</span>
+            </div>
           </Link>
         )}
       </div>
@@ -82,11 +100,11 @@ export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
                 <span className={cn(
                   'text-sm',
                   isActive && 'font-medium'
-                )}>{tAdmin('title')}</span>
+                )}>{item.label}</span>
               )}
               {collapsed && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
-                  {tAdmin('title')}
+                  {item.label}
                 </div>
               )}
             </Link>

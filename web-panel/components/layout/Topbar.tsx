@@ -12,6 +12,9 @@ export function Topbar() {
 
   const getPageTitle = (): string => {
     // Admin routes
+    if (pathname === '/admin/messages') {
+      return 'Demo Talepleri';
+    }
     if (pathname === '/admin/ingredients') {
       return tAdmin('title');
     }
