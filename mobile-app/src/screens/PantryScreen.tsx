@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,7 +18,15 @@ import AnimatedCard from "../components/ui/AnimatedCard";
 import PulseBadge from "../components/ui/PulseBadge";
 import ShimmerLine from "../components/ui/ShimmerLine";
 import SuccessSettleWrapper from "../components/ui/SuccessSettleWrapper";
-import { getPantry, replacePantry, type PantryItem, type PantryUpdateSource } from "../api/pantry";
+import {
+  getPantry,
+  getRecentPantryReceipts,
+  replacePantry,
+  type PantryItem,
+  type PantryReceipt,
+  type PantryReceiptPayload,
+  type PantryUpdateSource,
+} from "../api/pantry";
 import { buildPantryActivitySummary } from "../features/smartInsights";
 import { buildPantryUpdatedNotification } from "../notifications/notificationEvents";
 import { Routes } from "../navigation/routes";
@@ -123,6 +132,9 @@ export default function PantryScreen() {
   const [syncing, setSyncing] = useState(false);
   const [searchPrefill, setSearchPrefill] = useState("");
   const [searchPrefillKey, setSearchPrefillKey] = useState(0);
+  const [receiptDetailsOpen, setReceiptDetailsOpen] = useState(false);
+  const [receiptDetailsLoading, setReceiptDetailsLoading] = useState(false);
+  const [receiptHistory, setReceiptHistory] = useState<PantryReceipt[]>([]);
   const isPremium = user?.isPremium === true;
 
   useEffect(() => {
@@ -185,13 +197,14 @@ export default function PantryScreen() {
     fallback: Ingredient[],
     errorMessage: string,
     sourceType: PantryUpdateSource = "manual",
+    receipt?: PantryReceiptPayload,
   ): Promise<boolean> => {
     setSyncing(true);
     setSelected(next);
     syncSnapshotWithIngredients(next);
 
     try {
-      const updated = await replacePantry(next, { sourceType });
+      const updated = await replacePantry(next, { sourceType, receipt });
       const normalized = mapPantryToIngredients(updated);
       setPantrySnapshot(updated);
       setSelected(normalized);
@@ -224,13 +237,19 @@ export default function PantryScreen() {
   const appendIngredients = useCallback(async (
     ingredients: Ingredient[],
     sourceType: PantryUpdateSource = "manual",
+    receipt?: PantryReceiptPayload,
   ) => {
-    const current = selected;
-    const existing = new Set(current.map((item) => item.id));
-    const toAdd = ingredients.filter((item) => !existing.has(item.id));
-    if (toAdd.length === 0) return;
+    if (ingredients.length === 0) return;
 
-    const next = [...toAdd, ...current];
+    const current = selected;
+    const incomingIds = new Set(ingredients.map((item) => item.id));
+    const toAdd = ingredients.filter((item) => !current.some((existing) => existing.id === item.id));
+    if (toAdd.length === 0 && sourceType !== "receipt") return;
+
+    const next = [
+      ...ingredients,
+      ...current.filter((item) => !incomingIds.has(item.id)),
+    ];
     await persistSelection(
       next,
       current,
@@ -238,6 +257,7 @@ export default function PantryScreen() {
         ? "Ürün dolaba eklenemedi. Lütfen tekrar deneyin."
         : "The pantry item could not be added. Please try again.",
       sourceType,
+      receipt,
     );
   }, [language, persistSelection, selected]);
 
@@ -318,29 +338,12 @@ export default function PantryScreen() {
     }
 
     const scanResultId = registerScanResultHandler({
-      onConfirm: (ingredients: Ingredient[]) => {
-        void appendIngredients(ingredients, "receipt");
+      onConfirm: (ingredients: Ingredient[], receipt?: PantryReceiptPayload) => {
+        void appendIngredients(ingredients, "receipt", receipt);
       },
       onUseSearchTerm: handleSearchFallback,
     });
     (navigation as any).navigate(Routes.App.ReceiptScan, {
-      scanResultId,
-    });
-  }, [appendIngredients, handleSearchFallback, isPremium, navigation, openPremiumScanGate]);
-
-  const handleIngredientScan = useCallback(() => {
-    if (!isPremium) {
-      openPremiumScanGate();
-      return;
-    }
-
-    const scanResultId = registerScanResultHandler({
-      onConfirm: (ingredients: Ingredient[]) => {
-        void appendIngredients(ingredients, "photo");
-      },
-      onUseSearchTerm: handleSearchFallback,
-    });
-    (navigation as any).navigate(Routes.App.IngredientScan, {
       scanResultId,
     });
   }, [appendIngredients, handleSearchFallback, isPremium, navigation, openPremiumScanGate]);
@@ -400,6 +403,21 @@ export default function PantryScreen() {
       "manual",
     );
   }, [language, persistSelection, selected]);
+
+  const openReceiptDetails = useCallback(() => {
+    setReceiptDetailsOpen(true);
+    setReceiptDetailsLoading(true);
+    void getRecentPantryReceipts(10)
+      .then(setReceiptHistory)
+      .catch(() => {
+        showToast({
+          variant: "error",
+          title: language === "tr" ? "Fiş detayları açılamadı" : "Receipt details unavailable",
+          message: language === "tr" ? "Lütfen tekrar deneyin." : "Please try again.",
+        });
+      })
+      .finally(() => setReceiptDetailsLoading(false));
+  }, [language, showToast]);
 
   const s = styles(theme);
 
@@ -524,24 +542,6 @@ export default function PantryScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleIngredientScan}
-              activeOpacity={0.85}
-              disabled={syncing}
-              style={[
-                s.secondaryAction,
-                {
-                  backgroundColor: theme.surfaceElevated,
-                  borderColor: theme.border,
-                  opacity: syncing ? 0.7 : 1,
-                },
-              ]}
-            >
-              <Ionicons name="camera-outline" size={16} color={theme.text} />
-              <Text style={[s.secondaryActionTxt, { color: theme.text }]}>
-                {language === "tr" ? "Fotoğrafla Tara" : "Scan from photo"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               onPress={handleBarcodeScan}
               activeOpacity={0.85}
               disabled={syncing}
@@ -591,11 +591,18 @@ export default function PantryScreen() {
               </Text>
             </View>
             {selected.length > 0 ? (
-              <TouchableOpacity onPress={handleClear} activeOpacity={0.82} disabled={syncing}>
-                <Text style={[s.clearTxt, { color: theme.textMuted, opacity: syncing ? 0.6 : 1 }]}>
-                  {language === "tr" ? "Temizle" : "Clear"}
-                </Text>
-              </TouchableOpacity>
+              <View style={s.sectionActions}>
+                <TouchableOpacity onPress={openReceiptDetails} activeOpacity={0.82} disabled={syncing}>
+                  <Text style={[s.detailsTxt, { color: theme.primary, opacity: syncing ? 0.6 : 1 }]}>
+                    {language === "tr" ? "Detaylı gör" : "Details"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleClear} activeOpacity={0.82} disabled={syncing}>
+                  <Text style={[s.clearTxt, { color: theme.textMuted, opacity: syncing ? 0.6 : 1 }]}>
+                    {language === "tr" ? "Temizle" : "Clear"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
           </View>
 
@@ -697,8 +704,108 @@ export default function PantryScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={receiptDetailsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReceiptDetailsOpen(false)}
+      >
+        <View style={s.modalBackdrop}>
+          <View style={[s.receiptPanel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={s.receiptPanelHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.receiptPanelTitle, { color: theme.text }]}>
+                  {language === "tr" ? "Fiş detayları" : "Receipt details"}
+                </Text>
+                <Text style={[s.receiptPanelSub, { color: theme.textMuted }]}>
+                  {language === "tr" ? "Dolabına fişten eklenen son alışverişler" : "Recent receipt additions"}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setReceiptDetailsOpen(false)} activeOpacity={0.8}>
+                <Ionicons name="close-circle-outline" size={24} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {receiptDetailsLoading ? (
+              <View style={s.receiptLoading}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[s.receiptEmptyText, { color: theme.textMuted }]}>
+                  {language === "tr" ? "Detaylar yükleniyor..." : "Loading details..."}
+                </Text>
+              </View>
+            ) : receiptHistory.length === 0 ? (
+              <Text style={[s.receiptEmptyText, { color: theme.textMuted }]}>
+                {language === "tr" ? "Henüz kayıtlı fiş detayı yok." : "No saved receipt details yet."}
+              </Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.receiptList}>
+                {receiptHistory.map((receipt) => (
+                  <View key={receipt.id} style={[s.receiptGroup, { borderColor: theme.borderLight }]}>
+                    <View style={s.receiptGroupHead}>
+                      <Text style={[s.receiptDate, { color: theme.text }]}>
+                        {formatReceiptDate(receipt.savedAtUtc)}
+                      </Text>
+                      <Text style={[s.receiptCount, { color: theme.textMuted }]}>
+                        {receipt.lines.length} {language === "tr" ? "ürün" : "items"}
+                      </Text>
+                    </View>
+                    {receipt.lines.map((line) => (
+                      <View key={line.id ?? `${receipt.id}-${line.ingredientId}`} style={s.receiptLine}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.receiptLineTitle, { color: theme.text }]}>
+                            {line.ingredientName ?? line.productName}
+                          </Text>
+                          <Text style={[s.receiptLineMeta, { color: theme.textMuted }]}>
+                            {formatQuantity(line.quantity, line.unit)}
+                            {line.unitPrice != null ? ` x ${formatMoney(line.unitPrice, line.currency)}` : ""}
+                            {line.lineTotal != null ? `  ${formatMoney(line.lineTotal, line.currency)}` : ""}
+                          </Text>
+                          <Text style={[s.receiptRawLine, { color: theme.textMuted }]} numberOfLines={2}>
+                            {line.rawLine}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+function formatReceiptDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatQuantity(quantity?: number | null, unit?: string | null): string {
+  if (quantity == null && !unit) return "";
+  const amount = quantity == null
+    ? ""
+    : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(quantity);
+  return [amount, unit].filter(Boolean).join(" ");
+}
+
+function formatMoney(value?: number | null, currency?: string | null): string {
+  if (value == null) return "";
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: currency || "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function styles(theme: any) {
@@ -803,8 +910,10 @@ function styles(theme: any) {
     secondaryActionTxt: { fontSize: 14, fontWeight: "700" },
     section: { gap: spacing.sm },
     sectionHead: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
+    sectionActions: { alignItems: "flex-end", gap: 8 },
     sectionTitle: { fontSize: 16, fontWeight: "900" },
     sectionSub: { fontSize: 12, fontWeight: "500", lineHeight: 18 },
+    detailsTxt: { fontSize: 13, fontWeight: "900" },
     clearTxt: { fontSize: 13, fontWeight: "700" },
     listCard: {
       borderWidth: 1,
@@ -850,5 +959,56 @@ function styles(theme: any) {
       marginTop: 4,
     },
     syncBandText: { fontSize: 15, fontWeight: "800" },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.32)",
+      justifyContent: "flex-end",
+    },
+    receiptPanel: {
+      maxHeight: "82%",
+      borderTopLeftRadius: radii.xxl,
+      borderTopRightRadius: radii.xxl,
+      borderWidth: 1,
+      padding: spacing.lg,
+      gap: spacing.md,
+    },
+    receiptPanelHead: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: spacing.md,
+    },
+    receiptPanelTitle: { fontSize: 18, fontWeight: "900" },
+    receiptPanelSub: { fontSize: 12, fontWeight: "600", lineHeight: 17, marginTop: 3 },
+    receiptLoading: {
+      minHeight: 160,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    receiptEmptyText: { fontSize: 13, lineHeight: 19, textAlign: "center", paddingVertical: spacing.lg },
+    receiptList: { gap: spacing.md, paddingBottom: spacing.sm },
+    receiptGroup: {
+      borderWidth: 1,
+      borderRadius: radii.xl,
+      overflow: "hidden",
+    },
+    receiptGroupHead: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+    },
+    receiptDate: { fontSize: 13, fontWeight: "900", flex: 1 },
+    receiptCount: { fontSize: 11, fontWeight: "800" },
+    receiptLine: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 11,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: "rgba(0,0,0,0.08)",
+    },
+    receiptLineTitle: { fontSize: 13, fontWeight: "900" },
+    receiptLineMeta: { fontSize: 11.5, fontWeight: "800", marginTop: 3 },
+    receiptRawLine: { fontSize: 10.5, lineHeight: 15, marginTop: 4, fontStyle: "italic" },
   });
 }

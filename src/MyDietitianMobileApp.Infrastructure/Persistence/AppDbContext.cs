@@ -18,6 +18,8 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ClientIngredientProhibition> ClientIngredientProhibitions { get; set; } = null!;
         public DbSet<AccessKey> AccessKeys { get; set; }
         public DbSet<ClientPantryItem> ClientPantryItems { get; set; }
+        public DbSet<ClientPantryReceipt> ClientPantryReceipts { get; set; } = null!;
+        public DbSet<ClientPantryReceiptLine> ClientPantryReceiptLines { get; set; } = null!;
         public DbSet<ClientGoalPreference> ClientGoalPreferences { get; set; }
         public DbSet<ClientShoppingListItem> ClientShoppingListItems { get; set; }
         public DbSet<ClientCareMessage> ClientCareMessages { get; set; }
@@ -777,6 +779,86 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => new { e.ClientId, e.UpdatedAtUtc });
+            });
+
+            modelBuilder.Entity<ClientPantryReceipt>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.SavedAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.ReceiptDate)
+                    .IsRequired(false);
+
+                entity.Property(e => e.StoreName)
+                    .HasMaxLength(160);
+
+                entity.Property(e => e.Currency)
+                    .IsRequired()
+                    .HasMaxLength(8)
+                    .HasDefaultValue("TRY");
+
+                entity.Property(e => e.TotalAmount)
+                    .HasPrecision(10, 2);
+
+                entity.HasIndex(e => new { e.ClientId, e.SavedAtUtc })
+                    .IsDescending(false, true)
+                    .HasDatabaseName("IX_ClientPantryReceipts_ClientId_SavedAtUtc");
+
+                entity.HasIndex(e => e.SessionId)
+                    .HasDatabaseName("IX_ClientPantryReceipts_SessionId");
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasMany(e => e.Lines)
+                    .WithOne(e => e.Receipt)
+                    .HasForeignKey(e => e.ReceiptId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ClientPantryReceiptLine>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.RawLine)
+                    .IsRequired()
+                    .HasMaxLength(600);
+
+                entity.Property(e => e.ProductName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Quantity)
+                    .HasPrecision(10, 2);
+
+                entity.Property(e => e.Unit)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.UnitPrice)
+                    .HasPrecision(10, 2);
+
+                entity.Property(e => e.LineTotal)
+                    .HasPrecision(10, 2);
+
+                entity.Property(e => e.Currency)
+                    .IsRequired()
+                    .HasMaxLength(8)
+                    .HasDefaultValue("TRY");
+
+                entity.HasIndex(e => e.ReceiptId)
+                    .HasDatabaseName("IX_ClientPantryReceiptLines_ReceiptId");
+
+                entity.HasIndex(e => e.IngredientId)
+                    .HasDatabaseName("IX_ClientPantryReceiptLines_IngredientId");
+
+                entity.HasOne(e => e.Ingredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.IngredientId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<ClientGoalPreference>(entity =>

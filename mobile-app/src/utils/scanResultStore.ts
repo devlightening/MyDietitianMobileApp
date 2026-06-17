@@ -1,7 +1,8 @@
 import type { Ingredient } from "../types/alternative";
+import type { PantryReceiptPayload } from "../api/pantry";
 
 type ScanResultHandler = {
-  onConfirm?: (ingredients: Ingredient[]) => void;
+  onConfirm?: (ingredients: Ingredient[], receipt?: PantryReceiptPayload) => void;
   onUseSearchTerm?: (term: string) => void;
 };
 
@@ -13,9 +14,13 @@ export function registerScanResultHandler(handler: ScanResultHandler): string {
   return id;
 }
 
-export function resolveScanResult(id: string | undefined, ingredients: Ingredient[]): void {
+export function resolveScanResult(
+  id: string | undefined,
+  ingredients: Ingredient[],
+  receipt?: PantryReceiptPayload,
+): void {
   const handler = id ? handlers.get(id) : undefined;
-  handler?.onConfirm?.(ingredients);
+  handler?.onConfirm?.(ingredients, receipt);
 }
 
 export function resolveScanSearchTerm(id: string | undefined, term: string): void {

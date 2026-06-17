@@ -39,6 +39,13 @@ public class DetectedIngredientDto
     public double Confidence { get; init; }
     /// <summary>The raw name GPT-4o returned before normalization.</summary>
     public string DetectedName { get; init; } = string.Empty;
+    /// <summary>Receipt OCR line that proves this detected name, when scan kind is Receipt.</summary>
+    public string? RawLine { get; init; }
+    public decimal? Quantity { get; init; }
+    public string? Unit { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? LineTotal { get; init; }
+    public string? Currency { get; init; }
     /// <summary>Normalized (lowercase-trimmed) form used for resolver lookup.</summary>
     public string NormalizedLabel { get; init; } = string.Empty;
     /// <summary>
@@ -53,6 +60,19 @@ public class DetectedIngredientDto
     public bool RequiresConfirmation { get; init; }
 }
 
+public class ReceiptScanRowDto
+{
+    public string RawLine { get; init; } = string.Empty;
+    public string ProductName { get; init; } = string.Empty;
+    public decimal? Quantity { get; init; }
+    public string? Unit { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? LineTotal { get; init; }
+    public string? Currency { get; init; }
+    public bool IsFood { get; init; }
+    public string? ExcludedReason { get; init; }
+}
+
 /// <summary>
 /// Result of the image analysis + normalization pipeline.
 /// </summary>
@@ -65,6 +85,12 @@ public class AnalyzeIngredientImageResult
 
     /// <summary>Food names GPT detected but the normalization pipeline could not resolve.</summary>
     public IReadOnlyList<string> Unmatched { get; init; } = Array.Empty<string>();
+
+    /// <summary>Receipt rows parsed from OCR evidence. Empty for non-receipt scans.</summary>
+    public IReadOnlyList<ReceiptScanRowDto> ReceiptRows { get; init; } = Array.Empty<ReceiptScanRowDto>();
+
+    /// <summary>Receipt rows explicitly excluded as non-food or non-product rows.</summary>
+    public IReadOnlyList<ReceiptScanRowDto> Excluded { get; init; } = Array.Empty<ReceiptScanRowDto>();
 
     /// <summary>Total raw names GPT detected (Matched.Count + Unmatched.Count may be ≤ this due to deduplication).</summary>
     public int TotalDetected { get; init; }

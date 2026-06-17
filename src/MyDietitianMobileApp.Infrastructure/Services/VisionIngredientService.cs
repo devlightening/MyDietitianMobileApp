@@ -49,9 +49,9 @@ public sealed class VisionIngredientService : IVisionIngredientService
         CancellationToken cancellationToken = default)
     {
         var prompt =
-            $"Gorseldeki yiyecekleri tani. Yalnizca bu listeden sec: {string.Join(", ", _options.ClosedSetCanonicalNames)}. " +
-            "Ambalajli veya konserve urunler de dahil, icerigini listele. " +
-            "Gorduklerini yaz, gormedigini yazma. Turkce, kucuk harf, tekil. " +
+            "Gorselde acikca gorulen veya okunabilir etikette yazan yiyecekleri tani. " +
+            "Ambalajli urunde yalnizca etikette/ambalajda okunan gida turunu kullan; icerigini tahmin etme. " +
+            "Gorduklerini yaz, gormedigini yazma, eksik gorunenleri tamamlama. Turkce, kucuk harf, tekil. " +
             "JSON: {\"items\":[\"domates\",\"marul\"]}.";
 
         return DetectItemsAsync(
@@ -59,7 +59,10 @@ public sealed class VisionIngredientService : IVisionIngredientService
             mediaType,
             prompt,
             "Vision ingredient detection",
-            cancellationToken);
+            expectReceiptRows: false,
+            maxTokens: 180,
+            imageDetail: "low",
+            cancellationToken: cancellationToken);
     }
 
     public Task<VisionDetectionResult> DetectReceiptItemsAsync(
@@ -68,19 +71,24 @@ public sealed class VisionIngredientService : IVisionIngredientService
         CancellationToken cancellationToken = default)
     {
         const string prompt =
-            "Bu gorsel bir market fisi olabilir. Fisteki yenilebilir urun satirlarini ayikla ve pantry icin anlamli urun adlarini listele. " +
-            "Fiyat, adet, KDV, kampanya, toplam, kasa bilgisi ve fis numarasi gibi alanlari yok say. " +
-            "Marka varsa mumkunse sadelestir; urun turunu koru. " +
+            "Bu gorsel bir market fisi. Sadece fiste metin olarak okunan urun satirlarini cikar; gorselde/fiste yazmayan hicbir urunu tahmin etme, tamamlama veya oneri olarak ekleme. " +
+            "Her satir icin rawLine alanina fiste okudugun satiri aynen yaz. ProductName alanina yalnizca o satirdan temizlenmis urun adini yaz. " +
+            "Fiyat, adet, KDV, kampanya, toplam, nakit, para ustu, tarih, saat, kasa, fis no ve magaza bilgisi gibi satirlari urun yapma. " +
+            "Temizlik, kozmetik, kagit, ev gereci ve yenilemeyen urunlerde isFood=false yaz ve excludedReason doldur. " +
+            "Yenilebilir mutfak urunlerinde isFood=true yaz. Marka varsa mumkunse sadelestir; urun turunu koru. " +
+            "Satirda acikca okunuyorsa unitPrice, lineTotal ve currency alanlarini doldur; okunmuyorsa null birak. " +
             "Ornek: 'PINAR TAM YAGLI SUT 1L' -> 'sut', 'BANVIT TAVUK GOGSU' -> 'tavuk gogsu'. " +
-            "Yalnizca yenilebilir mutfak urunlerini dondur. Turkce, kucuk harf, kisa ve acik yaz. " +
-            "JSON: {\"items\":[\"sut\",\"yumurta\",\"domates\"]}.";
+            "Turkce, kucuk harf, kisa ve acik yaz. JSON: {\"items\":[{\"rawLine\":\"Domates 0,75 kg x 32,90 32,90\",\"productName\":\"domates\",\"quantity\":0.75,\"unit\":\"kg\",\"unitPrice\":32.90,\"lineTotal\":32.90,\"currency\":\"TRY\",\"isFood\":true,\"excludedReason\":null},{\"rawLine\":\"Yumusatici 1,5 L x 69,90 69,90\",\"productName\":\"yumusatici\",\"quantity\":1.5,\"unit\":\"l\",\"unitPrice\":69.90,\"lineTotal\":69.90,\"currency\":\"TRY\",\"isFood\":false,\"excludedReason\":\"non_food\"}]}.";
 
         return DetectItemsAsync(
             base64Image,
             mediaType,
             prompt,
             "Receipt ingredient detection",
-            cancellationToken);
+            expectReceiptRows: true,
+            maxTokens: 3000,
+            imageDetail: "high",
+            cancellationToken: cancellationToken);
     }
 
     private async Task<VisionDetectionResult> DetectItemsAsync(
@@ -88,6 +96,9 @@ public sealed class VisionIngredientService : IVisionIngredientService
         string mediaType,
         string systemPrompt,
         string operationName,
+        bool expectReceiptRows,
+        int maxTokens,
+        string imageDetail,
         CancellationToken cancellationToken)
     {
         try
@@ -129,7 +140,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
             var requestBody = new
             {
                 model = _options.ModelName,
-                max_tokens = 140,
+                max_tokens = maxTokens,
                 temperature = 0.0,
                 response_format = new { type = "json_object" },
                 messages = new object[]
@@ -150,7 +161,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                                 image_url = new
                                 {
                                     url = dataUri,
-                                    detail = "low",
+                                    detail = imageDetail,
                                 }
                             }
                         }
@@ -184,7 +195,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                 return VisionDetectionResult.Empty;
             }
 
-            return ParseResult(responseBody);
+            return ParseResult(responseBody, expectReceiptRows);
         }
         catch (Exception ex)
         {
@@ -261,7 +272,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
         }
     }
 
-    private VisionDetectionResult ParseResult(string responseBody)
+    private VisionDetectionResult ParseResult(string responseBody, bool expectReceiptRows)
     {
         try
         {
@@ -276,32 +287,68 @@ public sealed class VisionIngredientService : IVisionIngredientService
                 if (usage.TryGetProperty("completion_tokens", out var ct)) completionTokens = ct.GetInt32();
             }
 
+            var choice = root.GetProperty("choices")[0];
+            var finishReason = choice.TryGetProperty("finish_reason", out var finish)
+                ? finish.GetString()
+                : null;
+
             _logger.LogInformation(
-                "Vision API usage: model={Model} prompt_tokens={Prompt} completion_tokens={Completion} total={Total}",
+                "Vision API usage: model={Model} prompt_tokens={Prompt} completion_tokens={Completion} total={Total} finish_reason={FinishReason}",
                 _options.ModelName,
                 promptTokens,
                 completionTokens,
-                promptTokens + completionTokens);
+                promptTokens + completionTokens,
+                finishReason);
 
-            var content = root
-                .GetProperty("choices")[0]
+            if (string.Equals(finishReason, "length", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Vision response was truncated by max_tokens. Increase receipt maxTokens or simplify the receipt schema.");
+            }
+
+            var content = choice
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString() ?? string.Empty;
 
             var parsed = JsonSerializer.Deserialize<VisionRawResponse>(content, LaxJsonOptions);
-            var items = parsed?.Items is null || parsed.Items.Count == 0
-                ? Array.Empty<string>()
-                : (IReadOnlyList<string>)parsed.Items
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(s => s.Trim())
-                    .Take(_options.MaxDetectedItems)
-                    .ToList()
-                    .AsReadOnly();
+            var items = Array.Empty<string>() as IReadOnlyList<string>;
+            var receiptItems = Array.Empty<VisionReceiptItem>() as IReadOnlyList<VisionReceiptItem>;
+
+            if (parsed?.Items is not null && parsed.Items.Count > 0)
+            {
+                if (expectReceiptRows)
+                {
+                    receiptItems = parsed.Items
+                        .Select(ParseReceiptItem)
+                        .Where(item => !string.IsNullOrWhiteSpace(item.RawLine) && !string.IsNullOrWhiteSpace(item.ProductName))
+                        .Take(Math.Max(_options.MaxDetectedItems, 40))
+                        .ToList()
+                        .AsReadOnly();
+
+                    items = receiptItems
+                        .Where(item => item.IsFood && string.IsNullOrWhiteSpace(item.ExcludedReason))
+                        .Select(item => item.ProductName.Trim())
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .ToList()
+                        .AsReadOnly();
+                }
+                else
+                {
+                    items = parsed.Items
+                        .Select(ParseItemName)
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .Take(_options.MaxDetectedItems)
+                        .ToList()
+                        .AsReadOnly();
+                }
+            }
 
             return new VisionDetectionResult
             {
                 Items = items,
+                ReceiptItems = receiptItems,
                 PromptTokens = promptTokens,
                 CompletionTokens = completionTokens,
             };
@@ -316,7 +363,76 @@ public sealed class VisionIngredientService : IVisionIngredientService
     private sealed class VisionRawResponse
     {
         [JsonPropertyName("items")]
-        public List<string>? Items { get; set; }
+        public List<JsonElement>? Items { get; set; }
+    }
+
+    private static string ParseItemName(JsonElement item)
+    {
+        return item.ValueKind == JsonValueKind.String
+            ? item.GetString() ?? string.Empty
+            : GetString(item, "productName") ?? GetString(item, "name") ?? string.Empty;
+    }
+
+    private static VisionReceiptItem ParseReceiptItem(JsonElement item)
+    {
+        if (item.ValueKind == JsonValueKind.String)
+        {
+            var value = item.GetString()?.Trim() ?? string.Empty;
+            return new VisionReceiptItem
+            {
+                RawLine = value,
+                ProductName = value,
+                IsFood = true,
+            };
+        }
+
+        if (item.ValueKind != JsonValueKind.Object)
+            return new VisionReceiptItem();
+
+        return new VisionReceiptItem
+        {
+            RawLine = GetString(item, "rawLine") ?? string.Empty,
+            ProductName = GetString(item, "productName") ?? GetString(item, "name") ?? string.Empty,
+            Quantity = GetDecimal(item, "quantity"),
+            Unit = GetString(item, "unit"),
+            UnitPrice = GetDecimal(item, "unitPrice"),
+            LineTotal = GetDecimal(item, "lineTotal"),
+            Currency = GetString(item, "currency"),
+            IsFood = GetBool(item, "isFood") ?? true,
+            ExcludedReason = GetString(item, "excludedReason"),
+        };
+    }
+
+    private static string? GetString(JsonElement item, string propertyName)
+    {
+        return item.TryGetProperty(propertyName, out var value) && value.ValueKind != JsonValueKind.Null
+            ? value.ToString()?.Trim()
+            : null;
+    }
+
+    private static bool? GetBool(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var value))
+            return null;
+
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            return value.GetBoolean();
+
+        return bool.TryParse(value.ToString(), out var parsed) ? parsed : null;
+    }
+
+    private static decimal? GetDecimal(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var value) || value.ValueKind == JsonValueKind.Null)
+            return null;
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number))
+            return number;
+
+        var raw = value.ToString()?.Replace(',', '.');
+        return decimal.TryParse(raw, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
     }
 
     private sealed record NormalizedImage(string Base64Image, string MediaType, long ApproxBytes);

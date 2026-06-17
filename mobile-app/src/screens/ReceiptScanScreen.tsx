@@ -26,7 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "../context/ThemeContext";
-import { analyzeReceiptPantryImage } from "../api/pantry";
+import { analyzeReceiptPantryImage, type PantryReceiptPayload } from "../api/pantry";
 import {
   confirmDetection,
   type AnalyzeImageResponse,
@@ -342,6 +342,7 @@ export default function ReceiptScanScreen() {
       id: item.ingredientId,
       canonicalName: item.canonicalName,
     }));
+    const receiptPayload = buildReceiptPayload(selected, analysis?.sessionId);
 
     if (analysis?.sessionId) {
       void confirmDetection(
@@ -368,7 +369,7 @@ export default function ReceiptScanScreen() {
       completedAtUtc: new Date().toISOString(),
     }).catch(() => undefined);
 
-    resolveScanResult(route.params?.scanResultId, ingredients);
+    resolveScanResult(route.params?.scanResultId, ingredients, receiptPayload);
     clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
@@ -492,6 +493,11 @@ export default function ReceiptScanScreen() {
                           <Text style={[s.itemHint, { color: accent }]}>
                             {safe ? "Otomatik eşleşti" : "Lütfen kontrol edin"}
                           </Text>
+                          {!!item.rawLine && (
+                            <Text style={[s.itemRaw, { color: theme.textMuted }]} numberOfLines={2}>
+                              "{formatReceiptLine(item)}"
+                            </Text>
+                          )}
                         </View>
                         <View
                           style={[
@@ -552,6 +558,62 @@ export default function ReceiptScanScreen() {
       )}
     </SafeAreaView>
   );
+}
+
+function buildReceiptPayload(
+  selected: DetectedIngredient[],
+  sessionId?: string,
+): PantryReceiptPayload | undefined {
+  const lines = selected
+    .filter((item) => !!item.rawLine)
+    .map((item, index) => ({
+      ingredientId: item.ingredientId,
+      rawLine: item.rawLine ?? "",
+      productName: item.detectedName || item.canonicalName,
+      quantity: item.quantity ?? null,
+      unit: item.unit ?? null,
+      unitPrice: item.unitPrice ?? null,
+      lineTotal: item.lineTotal ?? null,
+      currency: item.currency ?? "TRY",
+      sortOrder: index,
+    }));
+
+  if (lines.length === 0) return undefined;
+
+  return {
+    sessionId: sessionId ?? null,
+    savedAtUtc: new Date().toISOString(),
+    currency: lines.find((line) => line.currency)?.currency ?? "TRY",
+    lines,
+  };
+}
+
+function formatReceiptLine(item: DetectedIngredient): string {
+  const amount = [formatNumber(item.quantity), item.unit].filter(Boolean).join(" ");
+  const unitPrice = formatMoney(item.unitPrice, item.currency);
+  const total = formatMoney(item.lineTotal, item.currency);
+  const detail = [
+    amount,
+    unitPrice ? `x ${unitPrice}` : null,
+    total,
+  ].filter(Boolean).join(" ");
+
+  return detail ? `${item.detectedName || item.canonicalName} ${detail}` : item.rawLine ?? item.canonicalName;
+}
+
+function formatNumber(value?: number | null): string | null {
+  if (value == null) return null;
+  return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatMoney(value?: number | null, currency?: string | null): string | null {
+  if (value == null) return null;
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: currency || "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function styles(theme: any) {
@@ -652,6 +714,7 @@ function styles(theme: any) {
     itemMain: { flex: 1, gap: 2 },
     itemTitle: { fontSize: 15, fontWeight: "800" },
     itemHint: { fontSize: 11, fontWeight: "800" },
+    itemRaw: { fontSize: 11, lineHeight: 16, fontStyle: "italic" },
     checkbox: {
       width: 24,
       height: 24,

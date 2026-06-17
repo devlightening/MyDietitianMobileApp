@@ -106,13 +106,19 @@ public class IngredientNormalizationServiceTests
     {
         using var db = CreateDbContext();
         await SeedBasicIngredientsAsync(db);
+
+        var cheese = new Ingredient(Guid.NewGuid(), "Cheese");
+        cheese.AddAlias("Peynir");
+        db.Ingredients.Add(cheese);
+        await db.SaveChangesAsync();
+
         var service = CreateService(db);
 
-        var result = await service.NormalizeAsync("yOgUrT");
+        var result = await service.NormalizeAsync("pEyNiR");
 
         result.Status.Should().Be(IngredientMatchStatus.Matched);
         result.MatchedBy.Should().Be(IngredientMatchedBy.Alias);
-        result.MatchedCanonicalName.Should().Be("Yoğurt");
+        result.MatchedCanonicalName.Should().Be("Cheese");
     }
 
     [Fact]
@@ -291,6 +297,56 @@ public class IngredientNormalizationServiceTests
         result.Status.Should().Be(IngredientMatchStatus.Matched);
         result.MatchedBy.Should().Be(IngredientMatchedBy.Canonical);
         result.MatchedCanonicalName.Should().Be("Tomato");
+    }
+
+    [Theory]
+    [InlineData("zeytinyagi", "Zeytinya\u011f\u0131")]
+    [InlineData("kirmizi biber", "K\u0131rm\u0131z\u0131 Biber")]
+    [InlineData("toz tuz", "Toz Tuz")]
+    [InlineData("bal", "Bal")]
+    public async Task Turkish_Canonical_Match_Folds_Diacritics_For_Receipt_Products(
+        string rawInput,
+        string canonicalName)
+    {
+        using var db = CreateDbContext();
+
+        db.Ingredients.Add(new Ingredient(Guid.NewGuid(), canonicalName));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.NormalizeAsync(rawInput);
+
+        result.Status.Should().Be(IngredientMatchStatus.Matched);
+        result.MatchedBy.Should().Be(IngredientMatchedBy.Canonical);
+        result.Confidence.Should().Be(1.0);
+        result.MatchedCanonicalName.Should().Be(canonicalName);
+    }
+
+    [Theory]
+    [InlineData("kirmizi biber")]
+    [InlineData("k\u0131rm\u0131z\u0131 biber")]
+    [InlineData("kirm\u0131z\u0131 biber")]
+    public async Task Red_Pepper_Aliases_Match_Red_Pepper_Not_Generic_Pepper(string rawInput)
+    {
+        using var db = CreateDbContext();
+
+        var redPepper = new Ingredient(Guid.NewGuid(), "K\u0131rm\u0131z\u0131 Biber");
+        redPepper.AddAlias("kirmizi biber");
+        redPepper.AddAlias("k\u0131rm\u0131z\u0131 biber");
+        redPepper.AddAlias("kirm\u0131z\u0131 biber");
+        var genericPepper = new Ingredient(Guid.NewGuid(), "Biber");
+
+        db.Ingredients.AddRange(redPepper, genericPepper);
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.NormalizeAsync(rawInput);
+
+        result.Status.Should().Be(IngredientMatchStatus.Matched);
+        result.MatchedIngredientId.Should().Be(redPepper.Id);
+        result.MatchedCanonicalName.Should().Be("K\u0131rm\u0131z\u0131 Biber");
     }
 }
 

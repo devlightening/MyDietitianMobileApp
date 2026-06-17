@@ -17,6 +17,13 @@ export interface DetectedIngredient {
   confidence: number;
   /** Raw name returned by the vision service before normalization */
   detectedName: string;
+  /** Receipt OCR source line proving this item, when available */
+  rawLine?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  lineTotal?: number | null;
+  currency?: string | null;
   /** Normalized (lowercase-trimmed) form used for resolver lookup */
   normalizedLabel: string;
   /**
@@ -31,6 +38,18 @@ export interface DetectedIngredient {
   requiresConfirmation: boolean;
 }
 
+export interface ReceiptScanRow {
+  rawLine: string;
+  productName: string;
+  quantity?: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  lineTotal?: number | null;
+  currency?: string | null;
+  isFood: boolean;
+  excludedReason?: string | null;
+}
+
 export interface AnalyzeImageResponse {
   sessionId: string;
   /** Availability state — always present. Check this before rendering results. */
@@ -43,6 +62,10 @@ export interface AnalyzeImageResponse {
   matched: DetectedIngredient[];
   /** Food names GPT detected but the DB could not normalize */
   unmatched: string[];
+  /** Structured receipt OCR rows; empty for normal photo scans. */
+  receiptRows?: ReceiptScanRow[];
+  /** Receipt rows excluded as non-food or non-product rows. */
+  excluded?: ReceiptScanRow[];
   /**
    * Machine-readable failure reason. Undefined on success.
    * "image_too_large" — image exceeded backend size limit even after client-side compression.

@@ -54,6 +54,7 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
     public async Task<DetectionResolverResult> ResolveAsync(
         string rawLabel,
         Guid sessionId,
+        bool allowSemanticFallback = true,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawLabel))
@@ -146,6 +147,22 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
                         RequiresReview        = !isAutoSelected,
                     };
                 }
+            }
+
+            if (!allowSemanticFallback)
+            {
+                _logger.LogWarning(
+                    "Vision resolve: raw='{Raw}' normalized='{Label}' UNRESOLVED - strict mode skips fuzzy/LLM fallback",
+                    rawLabel, normalizedLabel);
+
+                await LogDetectionAsync(
+                    sessionId, rawLabel, normalizedLabel,
+                    null, 0.0,
+                    "unresolved", false,
+                    usedOpenAi: false,
+                    cancellationToken);
+
+                return DetectionResolverResult.Unresolved(rawLabel, normalizedLabel);
             }
 
             // ── Layers 5 & 6: Fuzzy / LLM from normResult ────────────────────

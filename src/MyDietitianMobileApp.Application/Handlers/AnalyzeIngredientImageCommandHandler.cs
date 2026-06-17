@@ -3,6 +3,8 @@ using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Enums;
 using MyDietitianMobileApp.Domain.Services;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace MyDietitianMobileApp.Application.Handlers;
 
@@ -75,9 +77,30 @@ public class AnalyzeIngredientImageCommandHandler
             };
         }
 
-        var rawNames = detectionResult.Items;
+        var receiptRows = request.ScanKind == VisionScanKind.Receipt
+            ? detectionResult.ReceiptItems
+                .Select(NormalizeReceiptRow)
+                .ToList()
+            : new List<ReceiptScanRowDto>();
 
-        if (rawNames.Count == 0)
+        var excludedRows = request.ScanKind == VisionScanKind.Receipt
+            ? receiptRows
+                .Where(row => !row.IsFood || !string.IsNullOrWhiteSpace(row.ExcludedReason))
+                .ToList()
+            : new List<ReceiptScanRowDto>();
+
+        var candidateLabels = request.ScanKind == VisionScanKind.Receipt
+            ? receiptRows
+                .Where(row => row.IsFood && string.IsNullOrWhiteSpace(row.ExcludedReason))
+                .Select(row => (rawName: row.ProductName, receiptRow: (ReceiptScanRowDto?)row))
+                .Where(row => !string.IsNullOrWhiteSpace(row.rawName) && !string.IsNullOrWhiteSpace(row.receiptRow?.RawLine))
+                .ToList()
+            : detectionResult.Items
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => (rawName: name, receiptRow: (ReceiptScanRowDto?)null))
+                .ToList();
+
+        if (candidateLabels.Count == 0)
         {
             _logger.LogInformation("Vision returned no items for the provided image.");
             return new AnalyzeIngredientImageResult
@@ -85,23 +108,31 @@ public class AnalyzeIngredientImageCommandHandler
                 SessionId        = sessionId,
                 TotalDetected    = 0,
                 FeatureStatus    = "active",
+                ReceiptRows      = receiptRows,
+                Excluded         = excludedRows,
                 PromptTokens     = detectionResult.PromptTokens,
                 CompletionTokens = detectionResult.CompletionTokens,
             };
         }
 
-        _logger.LogInformation("Vision detected {Count} raw food names.", rawNames.Count);
+        _logger.LogInformation("Vision detected {Count} raw food names.", candidateLabels.Count);
 
         // Step 2: Resolve each label sequentially.
         // AppDbContext is not thread-safe — concurrent Task.WhenAll calls on the same scoped context
         // throw "A second operation was started on this context instance before a previous operation completed."
-        var results = new List<(string rawName, DetectionResolverResult resolveResult)>();
-        foreach (var name in rawNames)
+        var results = new List<(string rawName, ReceiptScanRowDto? receiptRow, DetectionResolverResult resolveResult)>();
+        foreach (var (name, receiptRow) in candidateLabels)
         {
             _logger.LogInformation(
-                "Vision resolve: rawLabel='{Raw}' startedResolution=true", name);
+                "Vision resolve: rawLabel='{Raw}' rawLine='{RawLine}' startedResolution=true",
+                name,
+                receiptRow?.RawLine);
 
-            var resolveResult = await _resolver.ResolveAsync(name, sessionId, cancellationToken);
+            var resolveResult = await _resolver.ResolveAsync(
+                name,
+                sessionId,
+                allowSemanticFallback: false,
+                cancellationToken);
 
             _logger.LogInformation(
                 "Vision resolve: rawLabel='{Raw}' normalizedLabel='{Norm}' completedResolution=true matchType={MatchType} matched={Matched} confidence={Conf:F2} autoSelected={Auto}",
@@ -112,14 +143,14 @@ public class AnalyzeIngredientImageCommandHandler
                 resolveResult.Confidence,
                 resolveResult.IsAutoSelected);
 
-            results.Add((rawName: name, resolveResult));
+            results.Add((rawName: name, receiptRow, resolveResult));
         }
 
         // Step 3: Split matched vs unmatched; apply closed-set filter
         var matched = new List<DetectedIngredientDto>();
         var unmatched = new List<string>();
 
-        foreach (var (rawName, resolveResult) in results)
+        foreach (var (rawName, receiptRow, resolveResult) in results)
         {
             if (resolveResult.MatchType == "unresolved"
                 || !resolveResult.MatchedIngredientId.HasValue
@@ -148,6 +179,12 @@ public class AnalyzeIngredientImageCommandHandler
                 CanonicalName        = resolveResult.MatchedIngredientName,
                 Confidence           = resolveResult.Confidence,
                 DetectedName         = rawName,
+                RawLine              = receiptRow?.RawLine,
+                Quantity             = receiptRow?.Quantity,
+                Unit                 = receiptRow?.Unit,
+                UnitPrice            = receiptRow?.UnitPrice,
+                LineTotal            = receiptRow?.LineTotal,
+                Currency             = receiptRow?.Currency,
                 NormalizedLabel      = resolveResult.NormalizedLabel,
                 MatchedBy            = resolveResult.MatchType,
                 MappingType          = MappingType.ExactIngredient,
@@ -167,17 +204,121 @@ public class AnalyzeIngredientImageCommandHandler
             deduped.Count,
             deduped.Count(m => !m.RequiresConfirmation),
             unmatched.Count,
-            rawNames.Count);
+            candidateLabels.Count);
 
         return new AnalyzeIngredientImageResult
         {
             SessionId        = sessionId,
             Matched          = deduped,
             Unmatched        = unmatched,
-            TotalDetected    = rawNames.Count,
+            ReceiptRows      = receiptRows,
+            Excluded         = excludedRows,
+            TotalDetected    = candidateLabels.Count,
             FeatureStatus    = "active",
             PromptTokens     = detectionResult.PromptTokens,
             CompletionTokens = detectionResult.CompletionTokens,
         };
+    }
+
+    private static ReceiptScanRowDto NormalizeReceiptRow(VisionReceiptItem item)
+    {
+        var rawLine = item.RawLine?.Trim() ?? string.Empty;
+        var productName = item.ProductName?.Trim() ?? string.Empty;
+        var excludedReason = FirstNonEmpty(item.ExcludedReason, GetDeterministicExclusionReason(productName, rawLine));
+        var isFood = item.IsFood && string.IsNullOrWhiteSpace(excludedReason);
+        var prices = ParsePricesFromRawLine(rawLine);
+
+        return new ReceiptScanRowDto
+        {
+            RawLine = rawLine,
+            ProductName = productName,
+            Quantity = item.Quantity,
+            Unit = item.Unit?.Trim(),
+            UnitPrice = prices.UnitPrice ?? item.UnitPrice,
+            LineTotal = prices.LineTotal ?? item.LineTotal,
+            Currency = prices.Currency ?? NormalizeCurrency(item.Currency),
+            IsFood = isFood,
+            ExcludedReason = excludedReason,
+        };
+    }
+
+    private static ReceiptPriceInfo ParsePricesFromRawLine(string rawLine)
+    {
+        if (string.IsNullOrWhiteSpace(rawLine))
+            return new ReceiptPriceInfo(null, null, null);
+
+        var currency = rawLine.Contains('\u20BA') || rawLine.Contains("TL", StringComparison.OrdinalIgnoreCase)
+            ? "TRY"
+            : null;
+        var priceSegment = Regex.Split(rawLine, @"\s[xX]\s").LastOrDefault() ?? rawLine;
+        var matches = Regex.Matches(priceSegment, @"(?:\u20BA|TL|TRY)?\s*(\d{1,6}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})", RegexOptions.IgnoreCase)
+            .Select(match => ParseTurkishMoney(match.Groups[1].Value))
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToList();
+
+        if (matches.Count == 0)
+            return new ReceiptPriceInfo(null, null, currency);
+
+        if (matches.Count == 1)
+            return new ReceiptPriceInfo(null, matches[0], currency ?? "TRY");
+
+        return new ReceiptPriceInfo(matches[^2], matches[^1], currency ?? "TRY");
+    }
+
+    private static decimal? ParseTurkishMoney(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        var normalized = raw.Trim().Replace(" ", string.Empty);
+        if (normalized.Contains(','))
+        {
+            normalized = normalized.Replace(".", string.Empty).Replace(',', '.');
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static string? NormalizeCurrency(string? currency)
+    {
+        if (string.IsNullOrWhiteSpace(currency))
+            return null;
+
+        var normalized = currency.Trim().ToUpperInvariant();
+        return normalized is "\u20BA" or "TL" or "TRY" ? "TRY" : normalized;
+    }
+
+    private sealed record ReceiptPriceInfo(decimal? UnitPrice, decimal? LineTotal, string? Currency);
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string? GetDeterministicExclusionReason(string productName, string rawLine)
+    {
+        var text = IngredientAcquisitionPolicy.NormalizeLookupKey($"{productName} {rawLine}");
+        if (string.IsNullOrWhiteSpace(text))
+            return "empty";
+
+        var nonProductKeywords = new[]
+        {
+            "toplam", "nakit", "para ustu", "paraustu", "tarih", "saat", "fis no",
+            "fisno", "kasa", "kdv", "vergi", "vkn", "tel", "tesekkur", "yeni urunler"
+        };
+        if (nonProductKeywords.Any(text.Contains))
+            return "non_product_row";
+
+        var nonFoodKeywords = new[]
+        {
+            "yumusatici", "yuzey temizleyici", "temizleyici", "bulasik deterjani",
+            "deterjan", "temizlik bezi", "camasir suyu", "bulasik sunger",
+            "sunger", "sungeri", "camasir", "kozmetik", "kagit havlu", "pecete"
+        };
+        if (nonFoodKeywords.Any(text.Contains))
+            return "non_food";
+
+        return null;
     }
 }

@@ -187,6 +187,12 @@ public class IngredientController : ControllerBase
                 canonicalName        = m.CanonicalName,
                 confidence           = m.Confidence,
                 detectedName         = m.DetectedName,
+                rawLine              = m.RawLine,
+                quantity             = m.Quantity,
+                unit                 = m.Unit,
+                unitPrice            = m.UnitPrice,
+                lineTotal            = m.LineTotal,
+                currency             = m.Currency,
                 normalizedLabel      = m.NormalizedLabel,
                 matchedBy            = m.MatchedBy,
                 mappingType          = m.MappingType,
@@ -194,6 +200,30 @@ public class IngredientController : ControllerBase
                 requiresConfirmation = m.RequiresConfirmation,
             }),
             unmatched = result.Unmatched,
+            receiptRows = result.ReceiptRows.Select(r => new
+            {
+                rawLine = r.RawLine,
+                productName = r.ProductName,
+                quantity = r.Quantity,
+                unit = r.Unit,
+                unitPrice = r.UnitPrice,
+                lineTotal = r.LineTotal,
+                currency = r.Currency,
+                isFood = r.IsFood,
+                excludedReason = r.ExcludedReason,
+            }),
+            excluded = result.Excluded.Select(r => new
+            {
+                rawLine = r.RawLine,
+                productName = r.ProductName,
+                quantity = r.Quantity,
+                unit = r.Unit,
+                unitPrice = r.UnitPrice,
+                lineTotal = r.LineTotal,
+                currency = r.Currency,
+                isFood = r.IsFood,
+                excludedReason = r.ExcludedReason,
+            }),
         });
     }
 

@@ -265,6 +265,98 @@ public class IngredientNormalizationService : IIngredientNormalizationService
             return result;
         }
 
+        // Layer B2: Folded canonical match.
+        // Runs after aliases so ASCII aliases like "yogurt" remain alias matches,
+        // while receipt text like "zeytinyagi" can still match canonical "Zeytinyağı".
+        var foldedCanonicalMatches = ingredients
+            .Where(i => NormalizeText(i.CanonicalName) == normalized)
+            .ToList();
+
+        if (foldedCanonicalMatches.Count == 1)
+        {
+            var match = foldedCanonicalMatches[0];
+            var result = new IngredientNormalizationResult
+            {
+                RawInput = rawInput,
+                NormalizedInput = normalized,
+                Status = IngredientMatchStatus.Matched,
+                MatchedBy = IngredientMatchedBy.Canonical,
+                Confidence = 1.0,
+                MatchedIngredientId = match.Id,
+                MatchedCanonicalName = match.CanonicalName,
+                MatchedAliases = match.Aliases.ToArray(),
+                Candidates = new[]
+                {
+                    new IngredientNormalizationCandidate
+                    {
+                        IngredientId = match.Id,
+                        CanonicalName = match.CanonicalName,
+                        Aliases = match.Aliases.ToArray(),
+                        MatchedBy = IngredientMatchedBy.Canonical,
+                        Confidence = 1.0
+                    }
+                },
+                Explanation = "Folded canonical ingredient match."
+            };
+            await LogAsync(result, sw, cancellationToken);
+            return result;
+        }
+
+        if (foldedCanonicalMatches.Count > 1)
+        {
+            if (IngredientResolutionPolicy.TryCollapseSameCanonicalIdentity(foldedCanonicalMatches, out var preferredCanonical, out var orderedCanonicalCandidates))
+            {
+                var collapsedResult = new IngredientNormalizationResult
+                {
+                    RawInput = rawInput,
+                    NormalizedInput = normalized,
+                    Status = IngredientMatchStatus.Matched,
+                    MatchedBy = IngredientMatchedBy.Canonical,
+                    Confidence = 1.0,
+                    MatchedIngredientId = preferredCanonical.Id,
+                    MatchedCanonicalName = preferredCanonical.CanonicalName,
+                    MatchedAliases = preferredCanonical.Aliases.ToArray(),
+                    Candidates = orderedCanonicalCandidates
+                        .Select(i => new IngredientNormalizationCandidate
+                        {
+                            IngredientId = i.Id,
+                            CanonicalName = i.CanonicalName,
+                            Aliases = i.Aliases.ToArray(),
+                            MatchedBy = IngredientMatchedBy.Canonical,
+                            Confidence = 1.0
+                        })
+                        .ToArray(),
+                    Explanation = $"Folded canonical ingredient match after collapsing {orderedCanonicalCandidates.Count} duplicate active rows for the same canonical identity."
+                };
+                await LogAsync(collapsedResult, sw, cancellationToken);
+                return collapsedResult;
+            }
+
+            var candidates = foldedCanonicalMatches
+                .Select(i => new IngredientNormalizationCandidate
+                {
+                    IngredientId = i.Id,
+                    CanonicalName = i.CanonicalName,
+                    Aliases = i.Aliases.ToArray(),
+                    MatchedBy = IngredientMatchedBy.Canonical,
+                    Confidence = 1.0
+                })
+                .ToArray();
+
+            var result = new IngredientNormalizationResult
+            {
+                RawInput = rawInput,
+                NormalizedInput = normalized,
+                Status = IngredientMatchStatus.Ambiguous,
+                MatchedBy = IngredientMatchedBy.Canonical,
+                Confidence = 1.0,
+                Candidates = candidates,
+                Explanation = "Multiple ingredients share the same folded canonical name after normalization."
+            };
+            await LogAsync(result, sw, cancellationToken);
+            return result;
+        }
+
         // ── Layer C: Fuzzy fallback match ─────────────────────────────────────────
         var fuzzyCandidates = CollapseDuplicateFuzzyCandidates(FuzzyIngredientMatcher.Match(normalized, ingredients));
 

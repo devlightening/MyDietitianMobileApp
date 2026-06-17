@@ -28,12 +28,27 @@ public class VisionDetectionResult
     };
 
     public IReadOnlyList<string> Items { get; init; } = Array.Empty<string>();
+    /// <summary>Structured receipt rows with OCR evidence. Used only by receipt scans.</summary>
+    public IReadOnlyList<VisionReceiptItem> ReceiptItems { get; init; } = Array.Empty<VisionReceiptItem>();
     /// <summary>Prompt tokens consumed by the vision call (0 when not applicable).</summary>
     public int PromptTokens { get; init; }
     /// <summary>Completion tokens consumed by the vision call (0 when not applicable).</summary>
     public int CompletionTokens { get; init; }
     /// <summary>Machine-readable failure reason. Null on success. "image_too_large" when image exceeds size limit.</summary>
     public string? Reason { get; init; }
+}
+
+public sealed class VisionReceiptItem
+{
+    public string RawLine { get; init; } = string.Empty;
+    public string ProductName { get; init; } = string.Empty;
+    public decimal? Quantity { get; init; }
+    public string? Unit { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? LineTotal { get; init; }
+    public string? Currency { get; init; }
+    public bool IsFood { get; init; }
+    public string? ExcludedReason { get; init; }
 }
 
 /// <summary>

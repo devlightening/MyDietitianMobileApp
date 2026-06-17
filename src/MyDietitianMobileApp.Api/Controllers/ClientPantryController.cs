@@ -104,6 +104,7 @@ public class ClientPantryController : ControllerBase
         var addedCount = incoming.Count(x => existing.All(e => e.IngredientId != x.IngredientId));
         var updatedCount = incoming.Count - addedCount;
         var sourceType = NormalizePantrySource(request.SourceType);
+        var receiptLines = NormalizeReceiptLines(request.Receipt, incomingByIngredient.Keys.ToHashSet());
 
         foreach (var stale in existing.Where(x => !incomingByIngredient.ContainsKey(x.IngredientId)).ToList())
             _appDb.ClientPantryItems.Remove(stale);
@@ -124,6 +125,41 @@ public class ClientPantryController : ControllerBase
             current.SetQuantity(item.Quantity, item.Unit);
         }
 
+        if (sourceType == "receipt" && receiptLines.Count > 0)
+        {
+            var receiptId = Guid.NewGuid();
+            var receiptCurrency = NormalizeCurrency(request.Receipt?.Currency)
+                ?? receiptLines.Select(x => NormalizeCurrency(x.Currency)).FirstOrDefault(x => x != null)
+                ?? "TRY";
+            var receipt = new ClientPantryReceipt(
+                receiptId,
+                identity.Value.clientId,
+                request.Receipt?.SessionId,
+                NormalizeUtc(request.Receipt?.SavedAtUtc) ?? DateTime.UtcNow,
+                NormalizeUtc(request.Receipt?.ReceiptDate),
+                request.Receipt?.StoreName,
+                receiptCurrency,
+                request.Receipt?.TotalAmount);
+
+            foreach (var line in receiptLines)
+            {
+                receipt.AddLine(new ClientPantryReceiptLine(
+                    Guid.NewGuid(),
+                    receiptId,
+                    line.IngredientId,
+                    line.RawLine,
+                    line.ProductName,
+                    line.Quantity,
+                    line.Unit,
+                    line.UnitPrice,
+                    line.LineTotal,
+                    line.Currency ?? receiptCurrency,
+                    line.SortOrder));
+            }
+
+            _appDb.ClientPantryReceipts.Add(receipt);
+        }
+
         _appDb.ClientActivities.Add(new ClientActivity(
             identity.Value.clientId,
             await GetActiveDietitianIdAsync(identity.Value.clientId),
@@ -140,6 +176,51 @@ public class ClientPantryController : ControllerBase
         await _appDb.SaveChangesAsync();
         var items = await QueryPantryAsync(identity.Value.clientId);
         return Ok(new { items });
+    }
+
+    [HttpGet("receipts/recent")]
+    public async Task<IActionResult> GetRecentReceipts([FromQuery] int limit = 10)
+    {
+        var identity = await _identityResolver.ResolveClientAsync(User);
+        if (!identity.HasValue)
+            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabi bulunamadi."));
+
+        var safeLimit = Math.Clamp(limit, 1, 20);
+        var receipts = await _appDb.ClientPantryReceipts
+            .AsNoTracking()
+            .Where(x => x.ClientId == identity.Value.clientId)
+            .OrderByDescending(x => x.SavedAtUtc)
+            .Take(safeLimit)
+            .Select(x => new
+            {
+                id = x.Id,
+                sessionId = x.SessionId,
+                savedAtUtc = x.SavedAtUtc,
+                receiptDate = x.ReceiptDate,
+                storeName = x.StoreName,
+                currency = x.Currency,
+                totalAmount = x.TotalAmount,
+                lines = x.Lines
+                    .OrderBy(line => line.SortOrder)
+                    .Select(line => new
+                    {
+                        id = line.Id,
+                        ingredientId = line.IngredientId,
+                        ingredientName = line.Ingredient.CanonicalName,
+                        rawLine = line.RawLine,
+                        productName = line.ProductName,
+                        quantity = line.Quantity,
+                        unit = line.Unit,
+                        unitPrice = line.UnitPrice,
+                        lineTotal = line.LineTotal,
+                        currency = line.Currency,
+                        sortOrder = line.SortOrder,
+                    })
+                    .ToList(),
+            })
+            .ToListAsync();
+
+        return Ok(new { receipts });
     }
 
     [HttpPost("analyze-receipt")]
@@ -193,6 +274,12 @@ public class ClientPantryController : ControllerBase
                 canonicalName = m.CanonicalName,
                 confidence = m.Confidence,
                 detectedName = m.DetectedName,
+                rawLine = m.RawLine,
+                quantity = m.Quantity,
+                unit = m.Unit,
+                unitPrice = m.UnitPrice,
+                lineTotal = m.LineTotal,
+                currency = m.Currency,
                 normalizedLabel = m.NormalizedLabel,
                 matchedBy = m.MatchedBy,
                 mappingType = m.MappingType,
@@ -200,6 +287,30 @@ public class ClientPantryController : ControllerBase
                 requiresConfirmation = m.RequiresConfirmation,
             }),
             unmatched = result.Unmatched,
+            receiptRows = result.ReceiptRows.Select(r => new
+            {
+                rawLine = r.RawLine,
+                productName = r.ProductName,
+                quantity = r.Quantity,
+                unit = r.Unit,
+                unitPrice = r.UnitPrice,
+                lineTotal = r.LineTotal,
+                currency = r.Currency,
+                isFood = r.IsFood,
+                excludedReason = r.ExcludedReason,
+            }),
+            excluded = result.Excluded.Select(r => new
+            {
+                rawLine = r.RawLine,
+                productName = r.ProductName,
+                quantity = r.Quantity,
+                unit = r.Unit,
+                unitPrice = r.UnitPrice,
+                lineTotal = r.LineTotal,
+                currency = r.Currency,
+                isFood = r.IsFood,
+                excludedReason = r.ExcludedReason,
+            }),
         });
     }
 
@@ -251,7 +362,58 @@ public class ClientPantryController : ControllerBase
             })
             .ToListAsync();
 
-        return items.Cast<object>().ToList();
+        var ingredientIds = items.Select(x => x.ingredientId).ToHashSet();
+        var latestReceiptLines = ingredientIds.Count == 0
+            ? []
+            : await _appDb.ClientPantryReceiptLines
+                .AsNoTracking()
+                .Where(x => ingredientIds.Contains(x.IngredientId) && x.Receipt.ClientId == clientId)
+                .OrderByDescending(x => x.Receipt.SavedAtUtc)
+                .ThenBy(x => x.SortOrder)
+                .Select(x => new
+                {
+                    x.IngredientId,
+                    receiptId = x.ReceiptId,
+                    savedAtUtc = x.Receipt.SavedAtUtc,
+                    rawLine = x.RawLine,
+                    productName = x.ProductName,
+                    quantity = x.Quantity,
+                    unit = x.Unit,
+                    unitPrice = x.UnitPrice,
+                    lineTotal = x.LineTotal,
+                    currency = x.Currency,
+                })
+                .ToListAsync();
+
+        var latestByIngredient = latestReceiptLines
+            .GroupBy(x => x.IngredientId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return items
+            .Select(x => new
+            {
+                x.ingredientId,
+                x.ingredientName,
+                x.quantity,
+                x.unit,
+                x.updatedAtUtc,
+                lastReceiptLine = latestByIngredient.TryGetValue(x.ingredientId, out var line)
+                    ? new
+                    {
+                        line.receiptId,
+                        line.savedAtUtc,
+                        line.rawLine,
+                        line.productName,
+                        line.quantity,
+                        line.unit,
+                        line.unitPrice,
+                        line.lineTotal,
+                        line.currency,
+                    }
+                    : null,
+            })
+            .Cast<object>()
+            .ToList();
     }
 
     private async Task<Guid?> GetActiveDietitianIdAsync(Guid clientId)
@@ -274,10 +436,80 @@ public class ClientPantryController : ControllerBase
             _ => "manual"
         };
     }
+
+    private static List<PantryReceiptLineRequest> NormalizeReceiptLines(
+        PantryReceiptRequest? receipt,
+        HashSet<Guid> selectedIngredientIds)
+    {
+        if (receipt?.Lines == null || selectedIngredientIds.Count == 0)
+            return [];
+
+        return receipt.Lines
+            .Where(line =>
+                selectedIngredientIds.Contains(line.IngredientId)
+                && !string.IsNullOrWhiteSpace(line.RawLine)
+                && !string.IsNullOrWhiteSpace(line.ProductName))
+            .Select((line, index) => line with
+            {
+                RawLine = line.RawLine.Trim(),
+                ProductName = line.ProductName.Trim(),
+                Unit = string.IsNullOrWhiteSpace(line.Unit) ? null : line.Unit.Trim(),
+                Currency = NormalizeCurrency(line.Currency) ?? "TRY",
+                SortOrder = line.SortOrder >= 0 ? line.SortOrder : index,
+            })
+            .OrderBy(line => line.SortOrder)
+            .Take(80)
+            .ToList();
+    }
+
+    private static DateTime? NormalizeUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+            return null;
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc),
+        };
+    }
+
+    private static string? NormalizeCurrency(string? currency)
+    {
+        if (string.IsNullOrWhiteSpace(currency))
+            return null;
+
+        var normalized = currency.Trim().ToUpperInvariant();
+        return normalized is "\u20BA" or "TL" ? "TRY" : normalized;
+    }
 }
 
 public sealed record PantryItemRequest(Guid IngredientId, decimal? Quantity, string? Unit);
 
-public sealed record ReplacePantryRequest(IReadOnlyList<PantryItemRequest> Items, string? SourceType = null);
+public sealed record PantryReceiptLineRequest(
+    Guid IngredientId,
+    string RawLine,
+    string ProductName,
+    decimal? Quantity,
+    string? Unit,
+    decimal? UnitPrice,
+    decimal? LineTotal,
+    string? Currency,
+    int SortOrder);
+
+public sealed record PantryReceiptRequest(
+    Guid? SessionId,
+    DateTime? SavedAtUtc,
+    DateTime? ReceiptDate,
+    string? StoreName,
+    string? Currency,
+    decimal? TotalAmount,
+    IReadOnlyList<PantryReceiptLineRequest> Lines);
+
+public sealed record ReplacePantryRequest(
+    IReadOnlyList<PantryItemRequest> Items,
+    string? SourceType = null,
+    PantryReceiptRequest? Receipt = null);
 
 public sealed record AnalyzeReceiptRequest(string? Base64Image, string? MediaType = "image/jpeg");

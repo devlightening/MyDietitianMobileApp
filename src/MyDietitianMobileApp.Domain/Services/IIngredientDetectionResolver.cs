@@ -25,6 +25,7 @@ public interface IIngredientDetectionResolver
     Task<DetectionResolverResult> ResolveAsync(
         string rawLabel,
         Guid sessionId,
+        bool allowSemanticFallback = true,
         CancellationToken cancellationToken = default);
 }
 
